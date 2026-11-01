@@ -1,0 +1,30 @@
+# Whitelist: ignore everything, then re-include the source, build and parameter files.
+*
+!*/
+
+# Source code (C++ and the generated equation includes) and the build file
+!*.cpp
+!*.h
+!*.inc
+!Makefile
+!tools/*.py
+
+# Parameter files (template and examples) and the seed profiles the examples read
+!*.par
+!examples/seeds/*.dat
+
+# Vendored Eigen: extensionless headers and licence files
+!third_party/**
+
+# Documentation (README and the figures it shows)
+!README.md
+!docs/**
+!.gitignore
+
+# Never: run directories, paper sources, build products, Python caches
+runs/
+papers/
+__pycache__/
+*.o
+*.d
+rotating_bs_solver

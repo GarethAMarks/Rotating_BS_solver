@@ -1,0 +1,24 @@
+# Rotating Dirac stars (one free spinor, mass mu = 1), m = m_azimuthal/2 = 1/2, ground state
+# (dirac_parity = -1), kappa = 8 pi. Started directly at kappa = 8 pi from a radial seed (the 1D
+# mini boson star at omega = 0.9, psi = phi/sqrt2) and continued toward lower omega through
+# omega_min = 0.680: M_max = 0.754 at omega = 0.80. About 3 min on 16 cores.
+# dirac_parity = 1 gives the second (p-like) family instead: M_max = 1.308, omega_min = 0.700.
+# Run from the repository root:  ./rotating_bs_solver examples/dirac_ground.par
+sequence_mode = rotating
+continuation_mode = arclength
+matter = dirac
+m_azimuthal = 1
+dirac_parity = -1
+omega_target = 0.9
+seed_file = examples/seeds/dirac_seed.dat
+Nr = 160
+Ntheta = 21
+radial_grid = adaptive
+radial_scale = 5
+linear_preconditioner = lu
+max_newton_iters = 30
+delta_omega = 0.01
+arclength_max_steps = 300
+first_law_tol = 0.01
+light_rings = 1
+ergoregion = 1

@@ -1,0 +1,22 @@
+# Rotating Proca stars (free complex vector field, mass mu = 1), m = 1, kappa = 8 pi. Started
+# directly at kappa = 8 pi from a radial seed (the 1D mini boson star at omega = 0.9, psi = sqrt2 phi)
+# and continued toward lower omega: M_max = 1.124 at omega = 0.55 (Herdeiro et al. 2019:
+# 1.125). About 13 min on 16 cores.
+# Run from the repository root:  ./rotating_bs_solver examples/proca_m1.par
+sequence_mode = rotating
+continuation_mode = arclength
+matter = proca
+m_azimuthal = 1
+omega_target = 0.9
+seed_file = examples/seeds/proca_m1_seed.dat
+Nr = 150
+Ntheta = 31
+radial_grid = adaptive
+radial_scale = 5
+max_newton_iters = 30
+delta_omega = 0.01
+arclength_max_steps = 400
+wall_resolution_tol = 0.5
+first_law_tol = 0.03
+light_rings = 1
+ergoregion = 1

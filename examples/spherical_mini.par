@@ -1,0 +1,14 @@
+# Spherical (1D) mini boson stars, kappa = 8 pi (G = 1), mu = 1: pseudo-arclength continuation
+# from omega = 0.9 toward compact stars, through M_max = 0.633 (omega = 0.853), omega_min = 0.768
+# and the next turning point (omega = 0.856) into the spiral. About 15 s. For the dilute leg toward
+# omega -> 1 use delta_omega = -0.005.
+# Run from the repository root:  ./rotating_bs_solver examples/spherical_mini.par
+# Output: families.dat (one line per model), bs.dat (last profile).
+sequence_mode = spherical
+continuation_mode = arclength
+potential = mini
+omega_target = 0.9
+Nr = 1600
+delta_omega = 0.005
+arclength_max_steps = 400
+arclength_omega_max = 0.995

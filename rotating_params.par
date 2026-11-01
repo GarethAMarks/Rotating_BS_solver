@@ -1,0 +1,127 @@
+# Rotating_BS_solver parameter template: every parameter, with a short note.
+# Usage: ./rotating_bs_solver rotating_params.par   (output goes to the current directory)
+# Parameters left out of a file take the defaults in bs_params.h; the full reference, including
+# which solver (1D spherical / 2D rotating) reads each one, is in README.md "Parameter reference".
+# Ready-to-run examples: examples/*.par
+
+# ----------------------
+# General run controls
+# ----------------------
+quiet = 0                       # reserved (unused)
+sequence_mode = spherical       # spherical | rotating
+continuation_mode = arclength   # arclength (follows the full family through turning points) | omega | charge | lapse
+output_prefix = out/bs          # reserved (unused): output goes to the current directory
+
+# ----------------------
+# Physical model
+# ----------------------
+potential = solitonic               # mini | kkls | solitonic | axionic | repulsive
+matter = scalar                 # rotating solver: scalar (uses potential) | proca (free vector field of mass mu) | dirac (free spinor, m = m_azimuthal/2)
+# init_file = path/bs2d.dat     # optional restart from an earlier profile (any grid; its omega replaces omega_target)
+# seed_file = path              # optional radial seed: r f l g W + all matter columns, or r f l g W psi (Proca m >= 1 / Dirac pattern)
+dirac_parity = -1               # Dirac equatorial reflection D1(pi-theta) = s D4, D2(pi-theta) = s D3: -1 ground state, +1 p-like
+dirac_origin_zero = 0           # Dirac origin: 0 smooth along rays (regular spinor) | 1 P=Q=X=Y=0 (Herdeiro et al. 2019)
+dirac_dissipation = 0.0         # Dirac: fourth-difference dissipation (experiments only)
+mu = 1.0
+kappa = 0.0                     # gravitational coupling continuation parameter
+
+# Potential-specific couplings
+sigma = 0.042426407 #0.056568542 #0.141421356            # solitonic potential coupling
+kkls_kappa = 0.1                # KKLS coupling
+f_axion = 0.005                 # axionic coupling
+lambda_rep = 0.0                # quartic repulsive coupling
+
+# ----------------------
+# Infinity BC targets
+# ----------------------
+omega_target = 0.95             # starting model (omega and arclength modes)
+charge_target = 0.0             # used when continuation_mode = charge
+
+# ----------------------
+# Compactified radial grid
+# ----------------------
+Nr = 400
+rbar_min = 0.0
+rbar_max = 1.0
+fd_order = 5                    # reserved (unused): stencils are fixed
+
+# ----------------------
+# Relaxation controls
+# ----------------------
+max_newton_iters = 30
+abs_tol_residual = 1e-10
+abs_tol_update = 1e-12
+linear_tol = 1e-8
+line_search_min = 1e-8
+max_line_search_steps = 40
+armijo_c = 1e-3
+predictor_smooth_iters = 3
+gmres_restart = 30
+gmres_max_iters = 200
+jacobian_fd_eps = 1e-7
+linear_solver = banded         # banded (default) | direct (dense, slow cross-check) | gmres
+rel_tol_residual = 1e-12       # converged: |R_i| <= rel_tol_residual * scale_i + abs_tol_residual (scale_i = sum |terms|)
+stall_rel_tol = 1e-9           # accept a Newton stall (round-off floor) if the same holds with this rel tol
+trivial_phi_tol = 1e-8         # reject converged states with max|phi| below this (vacuum)
+
+# ----------------------
+# Continuation controls
+# ----------------------
+delta_kappa = 1.0              # ignored for mini/repulsive: no Q-ball seed, solved directly at kappa_target
+delta_omega = 0.005
+delta_lapse = 0.005            # initial step for central lapse (sqrt(metric_f[0])) when continuation_mode = lapse
+lapse_target = 0.0             # target central lapse (sqrt(metric_f[0])) for lapse continuation
+delta_charge = 0.01
+kappa_target = 25.132741228718345   # target kappa for continuation (default 8*pi)
+write_bsdata_per_step = 1            # append branch data to initial_models.dat on each successful step
+
+# Pseudo-arclength continuation (continuation_mode = arclength). Starts from the model at
+# omega_target, takes one omega step of delta_omega to get a secant, then follows the curve.
+arclength_max_steps = 500
+arclength_ds_max = 0           # max step in state-space norm; 0 = 10x the first step
+arclength_min_cos = 0.8        # reject steps whose secant turns more sharply than this
+arclength_omega_min = 0.0      # stop once omega drops to this value
+arclength_omega_max = 0.0      # stop once omega rises to this value (0: the boson mass)
+core_resolution_tol = 0.1      # stop when f(r_1)/f(0) - 1 exceeds this (core unresolved; raise Nr)
+wall_resolution_tol = 0.2      # stop when max cell-to-cell jump in phi / max phi exceeds this (raise Nr)
+first_law_tol = 0.05           # rotating arclength: stop when consecutive models violate dM = omega dQ by more than this
+first_law_retries = 2          # halve ds this many times before stopping on a first-law violation
+
+# ----------------------
+# Q-ball shooting bootstrap (kappa = 0)
+# ----------------------
+use_qball_bootstrap = 1
+qball_rmax = 80.0
+qball_dr = 0.01
+qball_phi0_min = 1e-4
+qball_phi0_max = 2.0
+qball_scan_points = 80
+r_match_fac = 0.9
+
+# ----------------------
+# Rotating stars (sequence_mode = rotating)
+# ----------------------
+Ntheta = 21                    # theta points on [0, pi/2]; odd -> Simpson quadrature exact in structure
+m_azimuthal = 1
+rot_seed_amp = 0.9             # torus seed phi = amp (rho/R)^m exp(m/2 (1 - rho^2/R^2) - z^2 / (2 R^2))
+rot_seed_width = 2.5           # R
+rot_omega_stop = 0.3           # omega march (non-arclength): last step lands exactly on this omega
+rot_max_steps = 200            # omega march (non-arclength): max steps
+light_rings = 0                # 1: count equatorial light rings per model (extra families2d.dat column; radii in the log)
+ergoregion = 0                 # 1: max g_tt per model (column ergo_gtt_max; > 0: ergoregion; ergosurface radii in the log)
+radial_grid = compactified     # compactified: xi = r/(L+r), L = radial_scale | adaptive: points clustered on the star's wall, follows the solution
+radial_scale = 1.0             # compactified: L (half the radial points lie inside r < L)
+radial_cluster_fraction = 0.4  # adaptive: fraction of radial points in the wall cluster
+radial_scale_ratio = 0.5       # adaptive: L = this * outer edge of the wall region
+regrid_tol = 0.1               # adaptive: regrid when the wanted map drifts by more than this (relative to the cluster width / L)
+# Rotating solver performance (results do not depend on these; see README "Performance")
+jacobian_reuse = 1             # reuse the sparse LU factorization across Newton iterations / continuation steps
+newton_linear = gmres_lu       # gmres_lu: fresh Jacobian + GMRES preconditioned by the reused LU | chord
+gmres_lu_max_iters = 25        # refactor when GMRES needs more iterations than this
+linear_preconditioner = ilut   # factorization for gmres_lu: ilut (2-3x less memory; falls back to a stronger ILUT, then float LU) | lu (exact) | lu_float
+ilut_fill = 20                 # ilut: max entries per row of L, U in units of the row's nonzeros in the Jacobian
+ilut_droptol = 1e-5            # ilut: drop entries below this x the row norm
+gmres_lu_tol = 1e-6            # GMRES relative tolerance (inexact Newton)
+chord_rate = 0.25              # chord: refresh the Jacobian when |R| drops by less than this factor
+lu_pivot_threshold = 0.1       # sparse LU pivoting threshold (< 1 prefers the diagonal: less fill)
+arclength_predictor = quadratic  # Newton seed along the family: quadratic | linear

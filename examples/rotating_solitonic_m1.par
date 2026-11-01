@@ -1,0 +1,25 @@
+# Rotating (m = 1) solitonic boson stars, sigma = 0.05, kappa = 8 pi: flat-space rotating Q-ball
+# at omega = 0.9 -> ramp of the gravitational coupling kappa to 8 pi -> arclength continuation
+# toward lower omega, through the turning point omega_min = 0.1298 (M_max = 7.63). About 6 min
+# on 16 cores. For the leg toward omega -> 1 use delta_omega = -0.01.
+# Run from the repository root:  ./rotating_bs_solver examples/rotating_solitonic_m1.par
+# Output: families2d.dat (one line per model), bs2d.dat (latest profile).
+sequence_mode = rotating
+continuation_mode = arclength
+potential = solitonic
+sigma = 0.05
+m_azimuthal = 1
+omega_target = 0.9
+Nr = 150
+Ntheta = 41
+radial_grid = adaptive
+rot_seed_amp = 0.02
+rot_seed_width = 2
+max_newton_iters = 30
+delta_kappa = 1.0
+delta_omega = 0.01
+arclength_max_steps = 600
+wall_resolution_tol = 0.5
+first_law_tol = 0.01
+light_rings = 1
+ergoregion = 1
