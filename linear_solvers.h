@@ -19,6 +19,36 @@ inline int band_storage_width(int kl, int ku) { return 2 * kl + ku + 1; }
 bool banded_lu_solve(std::vector<double> band, int n, int kl, int ku,
                      std::vector<double> b, std::vector<double>& x);
 
+// (row, col, value) entry of a sparse matrix; duplicates are summed when a matrix is built.
+struct SparseEntry { int row, col; double val; };
+
+// Square sparse matrix in compressed column storage (Eigen::SparseMatrix<double> behind the
+// interface). Built once per Jacobian and shared by the factorization and the products, so
+// that no other copy of the matrix is kept.
+class SparseMatrix {
+public:
+    SparseMatrix();
+    ~SparseMatrix();
+    SparseMatrix(const SparseMatrix&) = delete;
+    SparseMatrix& operator=(const SparseMatrix&) = delete;
+
+    // Build an n x n matrix from lists of entries (any order; duplicates summed). Each list is
+    // released as soon as it has been copied, so the entries and the matrix coexist only briefly.
+    void build(int n, std::vector<std::vector<SparseEntry>>& parts);
+    void clear();                                     // release the storage
+    int rows() const;
+    long nnz() const;
+    // y = A x
+    void multiply(const std::vector<double>& x, std::vector<double>& y) const;
+    // Every stored entry (diagnostics: dense comparisons, dumps).
+    void entries(std::vector<SparseEntry>& out) const;
+
+private:
+    struct Impl;
+    Impl* impl_;
+    friend class SparseLUSolver;
+};
+
 // Sparse factorization behind a small interface so that the solver code does not include Eigen;
 // factor once, then solve (or precondition) for several right-hand sides. Kinds:
 //   LU       exact sparse LU in double precision (Eigen::SparseLU, COLAMD ordering): a direct solver;
@@ -28,15 +58,18 @@ bool banded_lu_solve(std::vector<double> band, int n, int kl, int ku,
 //            size grows roughly linearly with the grid instead of with the LU fill.
 class SparseLUSolver {
 public:
-    struct Entry { int row, col; double val; };
+    using Entry = SparseEntry;
     enum class Kind { LU, LUFloat, ILUT };
     SparseLUSolver();
     ~SparseLUSolver();
     SparseLUSolver(const SparseLUSolver&) = delete;
     SparseLUSolver& operator=(const SparseLUSolver&) = delete;
 
-    // Duplicate (row, col) entries are summed. Returns false if the factorization fails (for
-    // ILUT: a zero pivot). The factorization of any other kind held before is released first.
+    // Factor A (not copied for the LU and ILUT kinds; the float LU works on a single-precision
+    // copy). Returns false if the factorization fails (for ILUT: a zero pivot). The factorization
+    // of any other kind held before is released first.
+    bool factor(const SparseMatrix& A, Kind kind = Kind::LU);
+    // The same from entries (duplicate (row, col) entries are summed).
     bool factor(int n, const std::vector<Entry>& entries, Kind kind = Kind::LU);
     // Partial-pivoting threshold in (0, 1] for the LU kinds: < 1 prefers the diagonal when it is
     // within this factor of the column maximum, which reduces fill (SuperLU's diag_pivot_thresh).

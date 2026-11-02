@@ -182,16 +182,16 @@ private:
     // Newton with colored central-difference Jacobian and sparse LU.
     bool newton_solve(Vec& x);
     // Colored central-difference Jacobian at x (entries), its factorization into lu_, and both.
-    bool assemble_jacobian(const Vec& x, std::vector<SparseLUSolver::Entry>& ent);
+    bool assemble_jacobian(const Vec& x, SparseMatrix& J);
     // Factorization at a level of the fallback ladder of linear_preconditioner:
     //   ilut: ILUT (ilut_fill, ilut_droptol) -> ILUT (2 x fill, droptol / 10) -> float LU;
     //   lu_float: float LU -> exact LU;  lu: exact LU. False if it fails or the level does not exist.
-    bool factor_entries(const std::vector<SparseLUSolver::Entry>& ent, int level = 0);
+    bool factor_entries(const SparseMatrix& J, int level = 0);
     int fallback_levels() const { return precond_ == "ilut" ? 3 : precond_ == "lu_float" ? 2 : 1; }
     bool factor_jacobian(const Vec& x);
     // GMRES on the Jacobian given by ent, preconditioned with lu_, at most max_iters iterations
     // (no restart); false if not converged.
-    bool solve_gmres_lu(const std::vector<SparseLUSolver::Entry>& ent, const Vec& b, Vec& x, int& iterations,
+    bool solve_gmres_lu(const SparseMatrix& J, const Vec& b, Vec& x, int& iterations,
                         int max_iters) const;
     bool within(const Vec& R, const Vec& S, double rel) const;
 

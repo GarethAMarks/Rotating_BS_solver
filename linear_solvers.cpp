@@ -127,6 +127,88 @@ void process_memory_mb(double& rss, double& hwm) {
 }
 }
 
+struct SparseMatrix::Impl {
+    Eigen::SparseMatrix<double> A;
+};
+
+SparseMatrix::SparseMatrix() : impl_(new Impl) {}
+SparseMatrix::~SparseMatrix() { delete impl_; }
+
+void SparseMatrix::build(int n, std::vector<std::vector<SparseEntry>>& parts) {
+    // Counting sort by column straight into Eigen's compressed storage, then each column sorted
+    // by row with duplicates summed. Every part is freed right after it is scattered.
+    Eigen::SparseMatrix<double>& A = impl_->A;
+    A = Eigen::SparseMatrix<double>(n, n);
+    long total = 0;
+    for (const auto& p : parts) total += static_cast<long>(p.size());
+    A.resizeNonZeros(total);
+    int* outer = A.outerIndexPtr();
+    int* inner = A.innerIndexPtr();
+    double* val = A.valuePtr();
+    std::fill(outer, outer + n + 1, 0);
+    for (const auto& p : parts)
+        for (const SparseEntry& e : p) ++outer[e.col + 1];
+    for (int c = 0; c < n; ++c) outer[c + 1] += outer[c];
+    std::vector<int> pos(outer, outer + n);
+    for (auto& p : parts) {
+        for (const SparseEntry& e : p) {
+            const int k = pos[static_cast<size_t>(e.col)]++;
+            inner[k] = e.row;
+            val[k] = e.val;
+        }
+        std::vector<SparseEntry>().swap(p);
+    }
+    std::vector<std::pair<int, double>> col;
+    int w = 0;
+    for (int c = 0; c < n; ++c) {
+        const int b = outer[c], e = outer[c + 1];
+        col.clear();
+        for (int k = b; k < e; ++k) col.emplace_back(inner[k], val[k]);
+        std::sort(col.begin(), col.end(), [](const std::pair<int, double>& u, const std::pair<int, double>& v) {
+            return u.first < v.first;
+        });
+        outer[c] = w;
+        for (size_t k = 0; k < col.size(); ++k) {
+            if (w > outer[c] && inner[w - 1] == col[k].first) { val[w - 1] += col[k].second; continue; }
+            inner[w] = col[k].first;
+            val[w] = col[k].second;
+            ++w;
+        }
+    }
+    outer[n] = w;
+    A.resizeNonZeros(w);
+    A.data().squeeze();
+}
+
+void SparseMatrix::clear() { impl_->A = Eigen::SparseMatrix<double>(); }
+int SparseMatrix::rows() const { return static_cast<int>(impl_->A.rows()); }
+long SparseMatrix::nnz() const { return static_cast<long>(impl_->A.nonZeros()); }
+
+void SparseMatrix::multiply(const std::vector<double>& x, std::vector<double>& y) const {
+    // Serial on purpose: waking the OpenMP team here would leave it spinning through the
+    // (serial) triangular solves of the surrounding GMRES loop.
+    const Eigen::SparseMatrix<double>& A = impl_->A;
+    const int n = static_cast<int>(A.rows());
+    y.assign(static_cast<size_t>(n), 0.0);
+    const int* outer = A.outerIndexPtr();
+    const int* inner = A.innerIndexPtr();
+    const double* val = A.valuePtr();
+    for (int c = 0; c < n; ++c) {
+        const double xc = x[static_cast<size_t>(c)];
+        if (xc == 0.0) continue;
+        for (int k = outer[c]; k < outer[c + 1]; ++k) y[static_cast<size_t>(inner[k])] += val[k] * xc;
+    }
+}
+
+void SparseMatrix::entries(std::vector<SparseEntry>& out) const {
+    const Eigen::SparseMatrix<double>& A = impl_->A;
+    out.clear();
+    out.reserve(static_cast<size_t>(A.nonZeros()));
+    for (int c = 0; c < A.outerSize(); ++c)
+        for (Eigen::SparseMatrix<double>::InnerIterator it(A, c); it; ++it)
+            out.push_back({static_cast<int>(it.row()), c, it.value()});
+}
+
 struct SparseLUSolver::Impl {
     using SpD = Eigen::SparseMatrix<double>;
     using SpF = Eigen::SparseMatrix<float>;
@@ -143,20 +225,21 @@ SparseLUSolver::SparseLUSolver() : impl_(new Impl) {}
 SparseLUSolver::~SparseLUSolver() { delete impl_; }
 
 bool SparseLUSolver::factor(int n, const std::vector<Entry>& entries, Kind kind) {
+    SparseMatrix A;
+    std::vector<std::vector<Entry>> parts(1, entries);
+    A.build(n, parts);
+    return factor(A, kind);
+}
+
+bool SparseLUSolver::factor(const SparseMatrix& M, Kind kind) {
     // Release the factorizations of the other kinds before building this one (the kept one of
     // the same kind reuses its storage).
     if (kind != Kind::LU) impl_->lu.reset();
     if (kind != Kind::LUFloat) impl_->luf.reset();
     if (kind != Kind::ILUT) impl_->ilu.reset();
     impl_->kind = kind;
-    Eigen::SparseMatrix<double> A(n, n);
-    {
-        std::vector<Eigen::Triplet<double>> trip;
-        trip.reserve(entries.size());
-        for (const Entry& e : entries) trip.emplace_back(e.row, e.col, e.val);
-        A.setFromTriplets(trip.begin(), trip.end());
-    }
-    A.makeCompressed();
+    const Eigen::SparseMatrix<double>& A = M.impl_->A;
+    const int n = static_cast<int>(A.rows());
     impl_->n = n;
     // Diagnostics (environment): BS_DUMP_JACOBIAN=file writes the matrix (int64 n, int64 nnz, then
     // nnz x {int row, int col, double val}; overwritten at every factorization, so the file holds
@@ -169,6 +252,8 @@ bool SparseLUSolver::factor(int n, const std::vector<Entry>& entries, Kind kind)
         char name[1024];
         if (std::strchr(dump, '%')) std::snprintf(name, sizeof name, dump, n_factor);
         else std::snprintf(name, sizeof name, "%s", dump);
+        std::vector<Entry> entries;
+        M.entries(entries);
         std::ofstream out(name, std::ios::binary);
         const long long nn = n, ne = static_cast<long long>(entries.size());
         out.write(reinterpret_cast<const char*>(&nn), sizeof nn);
@@ -191,8 +276,6 @@ bool SparseLUSolver::factor(int n, const std::vector<Entry>& entries, Kind kind)
         if (!impl_->luf) impl_->luf.reset(new Eigen::SparseLU<Impl::SpF, Eigen::COLAMDOrdering<int>>);
         impl_->luf->setPivotThreshold(static_cast<float>(impl_->pivot));
         const Impl::SpF Af = A.cast<float>();
-        A.resize(0, 0);
-        A.data().squeeze();
         impl_->luf->analyzePattern(Af);
         impl_->luf->factorize(Af);
         ok = impl_->luf->info() == Eigen::Success;

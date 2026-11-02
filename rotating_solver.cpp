@@ -1206,7 +1206,7 @@ bool RotatingSolver::within(const Vec& R, const Vec& S, double rel) const {
     return true;
 }
 
-bool RotatingSolver::assemble_jacobian(const Vec& x, std::vector<SparseLUSolver::Entry>& ent) {
+bool RotatingSolver::assemble_jacobian(const Vec& x, SparseMatrix& J) {
     const auto t_start = std::chrono::steady_clock::now();
     const size_t n = n_unknowns();
     const size_t last = n - 1;
@@ -1218,8 +1218,10 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, std::vector<SparseLUSolver:
             for (int a = 0; a < nf_; ++a) typ[a] = std::max(typ[a], std::abs(x[idx(i, j, a)]));
     for (double& t : typ) if (t == 0.0) t = 1.0;
 
-    ent.clear();
-    ent.reserve(n * 60);
+    // Entries per grid row i (parts[i], each sized exactly) plus the omega column and the
+    // constraint row (parts[Nr_]); merged in grid order into J, which frees each part as it goes.
+    J.clear();
+    std::vector<std::vector<SparseLUSolver::Entry>> parts(static_cast<size_t>(Nr_) + 1);
     Vec xp, xm, Rp, Rm;
     // Central differences, one unknown at a time, re-evaluating only the nodes whose rows can
     // depend on it: (i +- 2, j), (i, j +- 2) and the axis row (i, 0) for j <= 4 (one-sided
@@ -1232,6 +1234,7 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, std::vector<SparseLUSolver:
         std::vector<std::pair<int, int>> dep;
 #pragma omp for schedule(dynamic, 2) nowait
         for (int i = 0; i < Nr_; ++i) {
+            tent.clear();
             for (int j = 0; j < Nt_; ++j) {
                 dep.clear();
                 if (matter_ != Matter::Proca) {
@@ -1271,10 +1274,10 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, std::vector<SparseLUSolver:
                     }
                 }
             }
+            parts[static_cast<size_t>(i)] = tent;  // a copy holds exactly its entries
         }
-#pragma omp critical
-        ent.insert(ent.end(), tent.begin(), tent.end());
     }
+    std::vector<SparseLUSolver::Entry>& ent = parts[static_cast<size_t>(Nr_)];
     // omega column (dense)
     {
         xp = x;
@@ -1302,11 +1305,15 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, std::vector<SparseLUSolver:
             if (grad[k] != 0.0) ent.push_back({static_cast<int>(last), static_cast<int>(k), grad[k]});
     }
 
+    J.build(static_cast<int>(n), parts);
+
     if (std::getenv("BS_CHECK_JACOBIAN") && n <= 4000) {
         // Diagnostic: compare the sparse (stencil-local) Jacobian with a column-by-column dense
         // central-difference Jacobian (same steps; constraint row excluded, it is exact).
         std::vector<double> Js(n * n, 0.0), Jd(n * n, 0.0);
-        for (const auto& e : ent) Js[static_cast<size_t>(e.row) * n + static_cast<size_t>(e.col)] += e.val;
+        std::vector<SparseLUSolver::Entry> all;
+        J.entries(all);
+        for (const auto& e : all) Js[static_cast<size_t>(e.row) * n + static_cast<size_t>(e.col)] += e.val;
         for (size_t k = 0; k < n; ++k) {
             xp = x;
             xm = x;
@@ -1335,9 +1342,8 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, std::vector<SparseLUSolver:
     return true;
 }
 
-bool RotatingSolver::factor_entries(const std::vector<SparseLUSolver::Entry>& ent, int level) {
+bool RotatingSolver::factor_entries(const SparseMatrix& J, int level) {
     if (level < 0 || level >= fallback_levels()) return false;
-    const size_t n = n_unknowns();
     if (!lu_) lu_.reset(new SparseLUSolver);
     lu_valid_ = false;
     const auto t_mid = std::chrono::steady_clock::now();
@@ -1350,7 +1356,7 @@ bool RotatingSolver::factor_entries(const std::vector<SparseLUSolver::Entry>& en
     } else if (precond_ == "lu_float") {
         kind = (level == 0) ? Kind::LUFloat : Kind::LU;
     }
-    const bool factored = lu_->factor(static_cast<int>(n), ent, kind);
+    const bool factored = lu_->factor(J, kind);
     t_lu_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - t_mid).count();
     if (!factored) {
         std::cout << "[warn] Sparse factorization failed: " << lu_->last_error() << "\n";
@@ -1364,42 +1370,11 @@ bool RotatingSolver::factor_entries(const std::vector<SparseLUSolver::Entry>& en
 }
 
 bool RotatingSolver::factor_jacobian(const Vec& x) {
-    std::vector<SparseLUSolver::Entry> ent;
-    return assemble_jacobian(x, ent) && factor_entries(ent);
+    SparseMatrix J;
+    return assemble_jacobian(x, J) && factor_entries(J);
 }
 
 namespace {
-// Compressed sparse rows built from (row, col, val) entries; duplicates are summed by the product.
-struct CSR {
-    std::vector<int> ptr, col;
-    std::vector<double> val;
-    void build(size_t n, const std::vector<SparseLUSolver::Entry>& ent) {
-        ptr.assign(n + 1, 0);
-        for (const auto& e : ent) ++ptr[static_cast<size_t>(e.row) + 1];
-        for (size_t k = 0; k < n; ++k) ptr[k + 1] += ptr[k];
-        col.resize(ent.size());
-        val.resize(ent.size());
-        std::vector<int> pos(ptr.begin(), ptr.end() - 1);
-        for (const auto& e : ent) {
-            const int p = pos[static_cast<size_t>(e.row)]++;
-            col[static_cast<size_t>(p)] = e.col;
-            val[static_cast<size_t>(p)] = e.val;
-        }
-    }
-    void mult(const std::vector<double>& x, std::vector<double>& y) const {
-        const int n = static_cast<int>(ptr.size()) - 1;
-        // Serial on purpose: ~1 ms at n = 41k, and waking the OpenMP team here would leave it
-        // spinning through the (serial) LU solves of the surrounding GMRES loop (~25% slower).
-        y.assign(static_cast<size_t>(n), 0.0);
-        for (int r = 0; r < n; ++r) {
-            double s = 0.0;
-            for (int p = ptr[static_cast<size_t>(r)]; p < ptr[static_cast<size_t>(r) + 1]; ++p)
-                s += val[static_cast<size_t>(p)] * x[static_cast<size_t>(col[static_cast<size_t>(p)])];
-            y[static_cast<size_t>(r)] = s;
-        }
-    }
-};
-
 double dot(const std::vector<double>& a, const std::vector<double>& b) {
     double s = 0.0;
     for (size_t k = 0; k < a.size(); ++k) s += a[k] * b[k];
@@ -1407,15 +1382,13 @@ double dot(const std::vector<double>& a, const std::vector<double>& b) {
 }
 }
 
-bool RotatingSolver::solve_gmres_lu(const std::vector<SparseLUSolver::Entry>& ent, const Vec& b, Vec& x,
+bool RotatingSolver::solve_gmres_lu(const SparseMatrix& J, const Vec& b, Vec& x,
                                     int& iterations, int max_iters) const {
     // Right-preconditioned GMRES on the fresh Jacobian with the (stale) factorization as
     // preconditioner: solve (J M^{-1}) u = b, x = M^{-1} u. No restart: gives up after max_iters
     // and lets the caller refactor instead. M is fixed, so x = M^{-1} (V y) costs one more
     // application instead of storing the preconditioned basis.
     const size_t n = b.size();
-    CSR J;
-    J.build(n, ent);
     const int m = std::max(1, max_iters);
     const double bnorm = std::sqrt(dot(b, b));
     iterations = 0;
@@ -1431,7 +1404,7 @@ bool RotatingSolver::solve_gmres_lu(const std::vector<SparseLUSolver::Entry>& en
     bool converged = false;
     for (; k < m; ++k) {
         if (!lu_->solve(V[static_cast<size_t>(k)], z)) return false;
-        J.mult(z, w);
+        J.multiply(z, w);
         for (int i = 0; i <= k; ++i) {  // modified Gram-Schmidt
             const double h = dot(w, V[static_cast<size_t>(i)]);
             H[static_cast<size_t>(i)][static_cast<size_t>(k)] = h;
@@ -1486,7 +1459,7 @@ bool RotatingSolver::newton_solve(Vec& x) {
     if (lu_valid_ && lu_constraint_ != constraint_) lu_valid_ = false;
     const bool gmres_mode = p_.jacobian_reuse && p_.newton_linear == "gmres_lu";
     const bool chord_mode = p_.jacobian_reuse && !gmres_mode;
-    std::vector<SparseLUSolver::Entry> jent;
+    SparseMatrix jent;  // the fresh Jacobian (shared by GMRES and the factorization)
     bool refresh = !p_.jacobian_reuse || !lu_valid_;
     const int max_its = chord_mode ? 3 * p_.max_newton_iters : p_.max_newton_iters;
     for (int it = 0; it < max_its; ++it) {

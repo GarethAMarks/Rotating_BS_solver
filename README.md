@@ -92,7 +92,7 @@ inside are relative to it:
 | file | what it computes | time (16 cores) |
 |---|---|---|
 | `examples/spherical_mini.par` | spherical mini boson stars from $\omega=0.9$ through $M_{\max}=0.633$, $\omega_{\min}=0.768$ and the next turning point | ~15 s |
-| `examples/rotating_solitonic_m1.par` | rotating solitonic boson stars, $\sigma=0.05$, $m=1$: Q-ball at $\kappa=0$ → $\kappa$ ramp → family down to $\omega_{\min}=0.1298$, $M_{\max}=7.63$ | ~6 min |
+| `examples/rotating_solitonic_m1.par` | rotating solitonic boson stars, $\sigma=0.05$, $m=1$: Q-ball at $\kappa=0$ → $\kappa$ ramp → family down to $\omega_{\min}=0.1298$, $M_{\max}=7.63$ | ~6–10 min |
 | `examples/proca_m1.par` | rotating Proca stars, $m=1$, from a radial seed: $M_{\max}=1.124$ | ~13 min |
 | `examples/dirac_ground.par` | rotating Dirac stars, $m=\frac12$, ground state, from a radial seed: $M_{\max}=0.754$, $\omega_{\min}=0.680$ | ~3 min |
 
