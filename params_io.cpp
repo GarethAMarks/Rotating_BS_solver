@@ -90,7 +90,9 @@ BSParams read_params(const std::string& file_path) {
         fill_parameter(line, std::string("rot_seed_amp = "), p.rot_seed_amp, true);
         fill_parameter(line, std::string("seed_file = "), p.seed_file, true);
         fill_parameter(line, std::string("init_file = "), p.init_file, true);
+        fill_parameter(line, std::string("init_file_prev = "), p.init_file_prev, true);
         fill_parameter(line, std::string("rot_seed_width = "), p.rot_seed_width, true);
+        fill_parameter(line, std::string("single_model_phi_max = "), p.single_model_phi_max, true);
         fill_parameter(line, std::string("rot_omega_stop = "), p.rot_omega_stop, true);
         fill_parameter(line, std::string("rot_max_steps = "), p.rot_max_steps, true);
         fill_parameter(line, std::string("radial_grid = "), p.radial_grid, true);
@@ -109,6 +111,8 @@ BSParams read_params(const std::string& file_path) {
         fill_parameter(line, std::string("linear_preconditioner = "), p.linear_preconditioner, true);
         fill_parameter(line, std::string("ilut_fill = "), p.ilut_fill, true);
         fill_parameter(line, std::string("ilut_droptol = "), p.ilut_droptol, true);
+        fill_parameter(line, std::string("ilut_float = "), p.ilut_float, true);
+        fill_parameter(line, std::string("ilut_lu_fallback = "), p.ilut_lu_fallback, true);
         fill_parameter(line, std::string("gmres_lu_tol = "), p.gmres_lu_tol, true);
         fill_parameter(line, std::string("output_prefix = "), p.output_prefix, true);
     }

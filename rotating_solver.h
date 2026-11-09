@@ -135,8 +135,11 @@ private:
     bool lu_valid_ = false;
     Constraint lu_constraint_ = Constraint::Omega;
     long n_factorizations_ = 0, n_newton_its_ = 0, n_gmres_its_ = 0;
+    mutable long n_gmres_rejected_ = 0;  // GMRES results whose true residual missed the tolerance
     std::string precond_ = "lu";      // effective linear_preconditioner
-    long n_level_[3] = {0, 0, 0};       // factorizations per fallback level (see factor_entries)
+    long n_level_[5] = {0, 0, 0, 0, 0}; // factorizations per fallback level (see factor_entries)
+    int start_level_ = 0;               // fallback rung the next factorization starts at
+    int start_level_streak_ = 0;        // successes in a row at start_level_
     double t_jac_ = 0.0, t_lu_ = 0.0;  // accumulated timings (reported by run())
     int last_refreshes_ = 0;
 
@@ -184,15 +187,16 @@ private:
     // Colored central-difference Jacobian at x (entries), its factorization into lu_, and both.
     bool assemble_jacobian(const Vec& x, SparseMatrix& J);
     // Factorization at a level of the fallback ladder of linear_preconditioner:
-    //   ilut: ILUT (ilut_fill, ilut_droptol) -> ILUT (2 x fill, droptol / 10) -> float LU;
+    //   ilut: ILUT (ilut_fill, ilut_droptol) -> ILUT (2 x fill, droptol / 10)
+    //         -> ILUT (4 x fill, droptol / 100) -> ILUT (8 x fill, droptol / 1000) -> float LU;
     //   lu_float: float LU -> exact LU;  lu: exact LU. False if it fails or the level does not exist.
     bool factor_entries(const SparseMatrix& J, int level = 0);
-    int fallback_levels() const { return precond_ == "ilut" ? 3 : precond_ == "lu_float" ? 2 : 1; }
+    int fallback_levels() const { return precond_ == "ilut" ? (p_.ilut_lu_fallback ? 5 : 4) : precond_ == "lu_float" ? 2 : 1; }
     bool factor_jacobian(const Vec& x);
-    // GMRES on the Jacobian given by ent, preconditioned with lu_, at most max_iters iterations
-    // (no restart); false if not converged.
+    // GMRES on the Jacobian J, preconditioned with lu_: up to `cycles` restart cycles of at most
+    // max_iters iterations; false if not converged (or the true residual misses the tolerance).
     bool solve_gmres_lu(const SparseMatrix& J, const Vec& b, Vec& x, int& iterations,
-                        int max_iters) const;
+                        int max_iters, int cycles = 1) const;
     bool within(const Vec& R, const Vec& S, double rel) const;
 
     // Pseudo-arclength continuation in the full state (as in the 1D solver).
@@ -208,7 +212,9 @@ private:
     bool map_drifted(const RadialMap& want) const;
     bool regrid(const RadialMap& want, const std::vector<Vec*>& states, const std::function<bool()>& resolve);
     Vec interpolate_state(const Vec& x, const RadialMap& old_map) const;
-    bool load_init_file();  // init_file: interpolate a bs2d.dat profile onto the current grid
+    // Interpolate a bs2d.dat profile (default: init_file) onto the current grid, into x_.
+    bool load_init_file(const std::string& path = "");
+    Vec init_prev_;  // init_file_prev loaded onto the grid: two-profile arclength restart
     bool init_map_valid_ = false;  // init_file header held a radial map (init_map_)
     RadialMap init_map_;
 

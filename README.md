@@ -15,13 +15,16 @@ compactness, and optionally its light rings and ergoregion.
 
 *Mass–frequency curves of rotating solitonic boson stars ($\sigma=0.05$, $m=1$), Proca stars
 ($m=1$) and Dirac stars ($m=\frac12$, ground state), with the points where light rings (circles) and
-an ergoregion (stars) first appear. $G=\mu=1$.*
+an ergoregion (stars) first appear. The dashed end of the Proca curve (inset: 300×41 and 400×41
+restarts through its frequency minimum) is resolution-limited: there the Komar and asymptotic masses
+differ by more than 0.5%. $G=\mu=1$.*
 
 ## Contents
 
 - [Features](#features)
 - [Building](#building)
 - [Quick start](#quick-start)
+- [Usage guide](docs/usage_guide.md) (families and single models)
 - [How it works](#how-it-works)
 - [Output files](#output-files)
 - [Parameter reference](#parameter-reference)
@@ -255,6 +258,8 @@ All files are written to the current directory.
   Only models at the target $\kappa$ are written, not the $\kappa$-ramp stages. Comparing `mass_komar` with `mass_asym`, and `angmom` with $m\,$`charge`, is a quick accuracy check.
 - **`bs2d.dat`**: profile of the latest model, used as the restart point. Columns
   `i j r theta f l g W <fields>`. The header records $\omega$ and the radial map.
+- **`bs2d_prev.dat`**: the model before it, in the same format. With `bs2d.dat` it makes a
+  two-profile restart (`init_file_prev`).
 
 **1D solver:**
 - **`families.dat`**: one line per model. Columns
@@ -317,7 +322,8 @@ is used, so check the summary the solver prints at start-up.
 | `rot_seed_amp` | `1.0` | 2D | Amplitude $A$ of the analytic seed $\phi=A(\rho/R)^m e^{m(1-\rho^2/R^2)/2-z^2/2R^2}$ ($\rho=r\sin\theta$, $z=r\cos\theta$). Proca uses a Gaussian of width $R$ in an $m$-dependent vector pattern. |
 | `rot_seed_width` | `3.0` | 2D | Seed radius $R$. |
 | `seed_file` | – | 2D | Radial seed profile, isotropic $r$ increasing; spaces in the path are allowed. Columns are either `r f l g W` plus all matter fields, or `r f l g W psi`, where one amplitude $\psi(r)$ is spread over the $m\ge1$ Proca pattern or the Dirac s-wave pattern. Beyond the last $r$: flat metric, no matter. Overrides the analytic seed. |
-| `init_file` | – | 2D | Restart from a `bs2d.dat` written by an earlier run, on any grid, with the same matter and $m$. Its $\omega$ replaces `omega_target`, and adaptive grids reuse its radial map. The arclength starts with a step *against* `delta_omega`, then continues forward. Overrides the seeds. |
+| `init_file` | – | 2D | Restart from a `bs2d.dat` written by an earlier run, on any grid, with the same matter and $m$. Its $\omega$ replaces `omega_target`, and adaptive grids reuse its radial map. The arclength starts with a fixed-$\omega$ step *against* `delta_omega` (forward if that fails), then continues forward. Overrides the seeds. |
+| `init_file_prev` | – | 2D | With `init_file`: the model before it (`bs2d_prev.dat` of the same run). Both are re-converged on the new grid with the arclength constraint along their secant, and the continuation goes on from there. No fixed-$\omega$ solve, so it works right at a fold, where the one-file restart can fail (a finer grid moves the fold). |
 
 ### Grid
 
@@ -357,9 +363,11 @@ These change speed and memory, not the solutions.
 | `newton_linear` | `gmres_lu` | `gmres_lu`: fresh Jacobian at every iteration, solved by GMRES preconditioned by the reused factorization. `chord`: use the reused factorization itself as the Jacobian. |
 | `gmres_lu_max_iters` | `25` | Refactor when GMRES needs more iterations than this. |
 | `gmres_lu_tol` | `1e-6` | GMRES relative tolerance; Newton is inexact, which does not change the converged state. |
-| `linear_preconditioner` | `ilut` | Factorization behind `gmres_lu`. `ilut`: incomplete LU, 2–3× less memory; on failure it retries with a stronger ILUT, then a single-precision LU. `lu`: exact sparse LU. `lu_float`: exact LU in single precision. Chord and plain Newton always use `lu`. Use `lu` for $m=0$ Proca stars (ILUT breaks down on their algebraic row) and for Dirac stars (more robust). |
+| `linear_preconditioner` | `ilut` | Factorization behind `gmres_lu`. `ilut`: incomplete LU, 2–3× less memory; when GMRES fails it retries with ILUTs of 2×, 4× and 8× the fill (droptol /10 each), then a single-precision LU (`ilut_lu_fallback`). The next factorization starts at the rung that worked last. `lu`: exact sparse LU. `lu_float`: exact LU in single precision. Chord and plain Newton always use `lu`. Use `lu` for $m=0$ Proca stars (ILUT breaks down on their algebraic row) and for Dirac stars (more robust). |
 | `ilut_fill` | `20` | ILUT: maximum entries per row of $L$ and $U$, in units of the row's nonzeros in the Jacobian. |
 | `ilut_droptol` | `1e-5` | ILUT: drop entries below this × the row norm. |
+| `ilut_lu_fallback` | `1` | ILUT: `1` keeps the single-precision exact LU as the last rung of the fallback ladder. It needs 2–3 GB at 250×41 and more on finer grids; with `0` a matrix that no ILUT rung handles fails the Newton step and the continuation halves its step instead. Use `0` from about 300×41 up on a machine with < 8 GB. |
+| `ilut_float` | `0` | ILUT: `1` stores the factors in single precision, roughly halving the memory and the factorization time. Near the end of strong-gravity families float round-off spoils the preconditioner and the continuation stalls, so it is off by default. |
 | `lu_pivot_threshold` | `0.1` | Sparse LU partial-pivoting threshold; values below 1 prefer the diagonal and give less fill. |
 | `chord_rate` | `0.25` | Chord: refresh the Jacobian when the residual drops by less than this factor. |
 
@@ -388,6 +396,7 @@ These change speed and memory, not the solutions.
 | `arclength_predictor` | `quadratic` | 2D | Newton's starting guess along the family: `quadratic` through the last three models, or `linear`. |
 | `arclength_omega_min` | `0.0` | both | Stop once $\omega$ drops to this value. |
 | `arclength_omega_max` | `0.0` | both | Stop once $\omega$ rises to this value; `0` means the boson mass. Near $\omega\to\mu$ the stars grow without bound. |
+| `single_model_phi_max` | `0` | 2D | If > 0, build only the model with `phi_max` equal to this value: arclength continuation (direction set by the sign of `delta_omega`, works through folds) until `phi_max` is bracketed, then a secant refinement along the chord to $10^{-9}$ relative. Writes `bs2d.dat` and stops. For $m\ge1$ the field vanishes on the axis, so the amplitude is the maximum, not the central value. |
 | `rot_omega_stop` | `0.3` | 2D | $\omega$ march: the last step lands exactly on this $\omega$. |
 | `rot_max_steps` | `200` | 2D | $\omega$ march: maximum number of steps. |
 | `write_bsdata_per_step` | `1` | both | 1D: append each $\kappa$-ramp stage to `initial_models.dat`. 2D: rewrite `bs2d.dat` after every accepted model, so a failed run leaves its last good model as a restart point; with `0`, every 10th. |
@@ -473,10 +482,15 @@ Selected checks; the full record is in [`docs/development_notes.md`](docs/develo
 - **Proca and Dirac stars** need a seed. The radial profile of a 1D mini boson star at the same
   $\omega$ works: $\psi=\sqrt2\,\phi$ for Proca and $\phi/\sqrt2$ for Dirac (see `examples/seeds/`).
 - **Memory** is dominated by the sparse factorization. `linear_preconditioner = ilut` (the default)
-  needs the least. On a 7–8 GB machine, about 250×41 is the largest 2D grid near the most compact
-  stars.
-- **Carrying the end of a family to a finer grid.** Restart from its `bs2d.dat` (`init_file`) with a
-  small `delta_omega` (e.g. 0.0002 near a fold) instead of re-tracing the whole family.
+  needs the least (the Jacobian itself is under 100 MB). Near the most compact Proca stars, with
+  `ilut_lu_fallback = 0`, the peaks are about 1.3 GB at 300×41 and 1.9 GB at 400×41, set by the
+  strongest ILUT rungs. The single-precision exact LU (`ilut_lu_fallback = 1`) needs 2–3 GB at
+  250×41 and does not fit at 300×41 on a 7–8 GB machine. `ilut_float = 1` roughly halves the ILUT
+  for families that stay away from the strong-gravity end.
+- **Carrying the end of a family to a finer grid.** Restart from its `bs2d.dat` (`init_file`) and
+  `bs2d_prev.dat` (`init_file_prev`) with a small `delta_omega` (e.g. 0.0002) instead of re-tracing
+  the whole family. The two-profile restart is needed next to a fold: the finer grid moves the
+  fold, and a fixed-$\omega$ solve there may have no solution.
 
 ## Repository layout
 

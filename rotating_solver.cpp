@@ -494,9 +494,10 @@ void RotatingSolver::seed_analytic() {
     if (!p_.init_file.empty()) load_init_file();
 }
 
-bool RotatingSolver::load_init_file() {
+bool RotatingSolver::load_init_file(const std::string& path_arg) {
     // bs2d.dat: header "... omega=<w>", rows "i j r theta <nf_ fields>" for the finite radii.
-    std::ifstream in(p_.init_file);
+    const std::string& path = path_arg.empty() ? p_.init_file : path_arg;
+    std::ifstream in(path);
     double omega = -1.0;
     std::vector<std::vector<double>> rows;
     std::string line;
@@ -536,7 +537,7 @@ bool RotatingSolver::load_init_file() {
         rows.push_back(v);
     }
     if (omega <= 0.0 || ni < 4 || nj < 4 || static_cast<int>(rows.size()) != ni * nj) {
-        std::cout << "[warn] init_file " << p_.init_file << ": not a usable bs2d.dat profile for matter = " << p_.matter
+        std::cout << "[warn] init_file " << path << ": not a usable bs2d.dat profile for matter = " << p_.matter
                   << " (need the omega header and " << 4 + nf_ << " columns); using the seed.\n";
         return false;
     }
@@ -593,7 +594,7 @@ bool RotatingSolver::load_init_file() {
     }
     p_.omega_target = omega;
     x_.back() = omega;
-    std::cout << "[info] initial state from " << p_.init_file << " (" << ni << " x " << nj << " nodes, omega = " << omega << ")\n";
+    std::cout << "[info] initial state from " << path << " (" << ni << " x " << nj << " nodes, omega = " << omega << ")\n";
     return true;
 }
 
@@ -1351,8 +1352,13 @@ bool RotatingSolver::factor_entries(const SparseMatrix& J, int level) {
     using Kind = SparseLUSolver::Kind;
     Kind kind = Kind::LU;
     if (precond_ == "ilut") {
-        kind = (level < 2) ? Kind::ILUT : Kind::LUFloat;
-        lu_->set_ilut(level == 0 ? p_.ilut_fill : 2.0 * p_.ilut_fill, level == 0 ? p_.ilut_droptol : 0.1 * p_.ilut_droptol);
+        // Each ILUT rung doubles the fill and divides the drop tolerance by 10. The x4 and x8
+        // rungs take a third to a half of the float LU's memory and rescue the near-fold matrices
+        // that the weaker ones cannot precondition (x8: regrids at omega_min on 400x41).
+        kind = (level < 4) ? Kind::ILUT : Kind::LUFloat;
+        static const double fill_x[4] = {1.0, 2.0, 4.0, 8.0}, drop_x[4] = {1.0, 0.1, 0.01, 0.001};
+        if (level < 4)
+            lu_->set_ilut(fill_x[level] * p_.ilut_fill, drop_x[level] * p_.ilut_droptol, p_.ilut_float != 0);
     } else if (precond_ == "lu_float") {
         kind = (level == 0) ? Kind::LUFloat : Kind::LU;
     }
@@ -1383,67 +1389,88 @@ double dot(const std::vector<double>& a, const std::vector<double>& b) {
 }
 
 bool RotatingSolver::solve_gmres_lu(const SparseMatrix& J, const Vec& b, Vec& x,
-                                    int& iterations, int max_iters) const {
+                                    int& iterations, int max_iters, int cycles) const {
     // Right-preconditioned GMRES on the fresh Jacobian with the (stale) factorization as
-    // preconditioner: solve (J M^{-1}) u = b, x = M^{-1} u. No restart: gives up after max_iters
+    // preconditioner: solve (J M^{-1}) u = b, x = M^{-1} u. Up to `cycles` cycles of max_iters
+    // iterations, each restarted from the true residual of the current x; gives up after that
     // and lets the caller refactor instead. M is fixed, so x = M^{-1} (V y) costs one more
     // application instead of storing the preconditioned basis.
     const size_t n = b.size();
     const int m = std::max(1, max_iters);
     const double bnorm = std::sqrt(dot(b, b));
+    const double tol = p_.gmres_lu_tol * bnorm;
     iterations = 0;
     x.assign(n, 0.0);
     if (bnorm == 0.0) return true;
-    std::vector<Vec> V(1, b);
-    for (double& v : V[0]) v /= bnorm;
-    std::vector<std::vector<double>> H(static_cast<size_t>(m) + 1, std::vector<double>(static_cast<size_t>(m), 0.0));
-    std::vector<double> cs(static_cast<size_t>(m)), sn(static_cast<size_t>(m)), g(static_cast<size_t>(m) + 1, 0.0);
-    g[0] = bnorm;
-    Vec z, w;
-    int k = 0;
-    bool converged = false;
-    for (; k < m; ++k) {
-        if (!lu_->solve(V[static_cast<size_t>(k)], z)) return false;
-        J.multiply(z, w);
-        for (int i = 0; i <= k; ++i) {  // modified Gram-Schmidt
-            const double h = dot(w, V[static_cast<size_t>(i)]);
-            H[static_cast<size_t>(i)][static_cast<size_t>(k)] = h;
-            for (size_t q = 0; q < n; ++q) w[q] -= h * V[static_cast<size_t>(i)][q];
+    Vec r = b, z, w, Jx;
+    for (int cycle = 0; cycle < std::max(1, cycles); ++cycle) {
+        const double rnorm = std::sqrt(dot(r, r));
+        std::vector<Vec> V(1, r);
+        for (double& v : V[0]) v /= rnorm;
+        std::vector<std::vector<double>> H(static_cast<size_t>(m) + 1, std::vector<double>(static_cast<size_t>(m), 0.0));
+        std::vector<double> cs(static_cast<size_t>(m)), sn(static_cast<size_t>(m)), g(static_cast<size_t>(m) + 1, 0.0);
+        g[0] = rnorm;
+        int k = 0;
+        bool converged = false;
+        for (; k < m; ++k) {
+            if (!lu_->solve(V[static_cast<size_t>(k)], z)) return false;
+            J.multiply(z, w);
+            for (int i = 0; i <= k; ++i) {  // modified Gram-Schmidt
+                const double h = dot(w, V[static_cast<size_t>(i)]);
+                H[static_cast<size_t>(i)][static_cast<size_t>(k)] = h;
+                for (size_t q = 0; q < n; ++q) w[q] -= h * V[static_cast<size_t>(i)][q];
+            }
+            const double hn = std::sqrt(dot(w, w));
+            H[static_cast<size_t>(k) + 1][static_cast<size_t>(k)] = hn;
+            for (int i = 0; i < k; ++i) {  // apply previous Givens rotations
+                const double t = cs[static_cast<size_t>(i)] * H[static_cast<size_t>(i)][static_cast<size_t>(k)]
+                                 + sn[static_cast<size_t>(i)] * H[static_cast<size_t>(i) + 1][static_cast<size_t>(k)];
+                H[static_cast<size_t>(i) + 1][static_cast<size_t>(k)] = -sn[static_cast<size_t>(i)] * H[static_cast<size_t>(i)][static_cast<size_t>(k)]
+                                                                        + cs[static_cast<size_t>(i)] * H[static_cast<size_t>(i) + 1][static_cast<size_t>(k)];
+                H[static_cast<size_t>(i)][static_cast<size_t>(k)] = t;
+            }
+            const double a = H[static_cast<size_t>(k)][static_cast<size_t>(k)], bb = H[static_cast<size_t>(k) + 1][static_cast<size_t>(k)];
+            const double rr = std::hypot(a, bb);
+            cs[static_cast<size_t>(k)] = a / rr;
+            sn[static_cast<size_t>(k)] = bb / rr;
+            H[static_cast<size_t>(k)][static_cast<size_t>(k)] = rr;
+            H[static_cast<size_t>(k) + 1][static_cast<size_t>(k)] = 0.0;
+            g[static_cast<size_t>(k) + 1] = -sn[static_cast<size_t>(k)] * g[static_cast<size_t>(k)];
+            g[static_cast<size_t>(k)] *= cs[static_cast<size_t>(k)];
+            if (std::abs(g[static_cast<size_t>(k) + 1]) <= tol) { ++k; converged = true; break; }
+            if (hn == 0.0) { ++k; converged = true; break; }
+            V.push_back(w);
+            for (double& v : V.back()) v /= hn;
         }
-        const double hn = std::sqrt(dot(w, w));
-        H[static_cast<size_t>(k) + 1][static_cast<size_t>(k)] = hn;
-        for (int i = 0; i < k; ++i) {  // apply previous Givens rotations
-            const double t = cs[static_cast<size_t>(i)] * H[static_cast<size_t>(i)][static_cast<size_t>(k)]
-                             + sn[static_cast<size_t>(i)] * H[static_cast<size_t>(i) + 1][static_cast<size_t>(k)];
-            H[static_cast<size_t>(i) + 1][static_cast<size_t>(k)] = -sn[static_cast<size_t>(i)] * H[static_cast<size_t>(i)][static_cast<size_t>(k)]
-                                                                    + cs[static_cast<size_t>(i)] * H[static_cast<size_t>(i) + 1][static_cast<size_t>(k)];
-            H[static_cast<size_t>(i)][static_cast<size_t>(k)] = t;
+        iterations += k;
+        if (!converged && cycle + 1 == std::max(1, cycles)) return false;
+        std::vector<double> y(static_cast<size_t>(k), 0.0);  // back substitution H y = g
+        for (int i = k - 1; i >= 0; --i) {
+            double s = g[static_cast<size_t>(i)];
+            for (int j = i + 1; j < k; ++j) s -= H[static_cast<size_t>(i)][static_cast<size_t>(j)] * y[static_cast<size_t>(j)];
+            y[static_cast<size_t>(i)] = s / H[static_cast<size_t>(i)][static_cast<size_t>(i)];
         }
-        const double a = H[static_cast<size_t>(k)][static_cast<size_t>(k)], bb = H[static_cast<size_t>(k) + 1][static_cast<size_t>(k)];
-        const double rr = std::hypot(a, bb);
-        cs[static_cast<size_t>(k)] = a / rr;
-        sn[static_cast<size_t>(k)] = bb / rr;
-        H[static_cast<size_t>(k)][static_cast<size_t>(k)] = rr;
-        H[static_cast<size_t>(k) + 1][static_cast<size_t>(k)] = 0.0;
-        g[static_cast<size_t>(k) + 1] = -sn[static_cast<size_t>(k)] * g[static_cast<size_t>(k)];
-        g[static_cast<size_t>(k)] *= cs[static_cast<size_t>(k)];
-        if (std::abs(g[static_cast<size_t>(k) + 1]) <= p_.gmres_lu_tol * bnorm) { ++k; converged = true; break; }
-        if (hn == 0.0) { ++k; converged = true; break; }
-        V.push_back(w);
-        for (double& v : V.back()) v /= hn;
+        Vec u(n, 0.0);
+        for (int i = 0; i < k; ++i)
+            for (size_t q = 0; q < n; ++q) u[q] += y[static_cast<size_t>(i)] * V[static_cast<size_t>(i)][q];
+        if (!lu_->solve(u, z)) return false;
+        for (size_t q = 0; q < n; ++q) x[q] += z[q];
+        // The Givens estimate is the residual in exact arithmetic. An unstable incomplete factor
+        // (huge or non-finite entries of M^{-1}) can make it converge while x itself is garbage,
+        // which then fails every line search: check the true residual. It is also the next
+        // cycle's starting residual, so a cycle whose estimate converged but whose true residual
+        // did not simply continues from there.
+        J.multiply(x, Jx);
+        double rr = 0.0;
+        for (size_t q = 0; q < n; ++q) {
+            r[q] = b[q] - Jx[q];
+            rr += r[q] * r[q];
+        }
+        if (!std::isfinite(rr)) break;
+        if (std::sqrt(rr) <= 100.0 * tol) return true;
     }
-    iterations = k;
-    if (!converged) return false;
-    std::vector<double> y(static_cast<size_t>(k), 0.0);  // back substitution H y = g
-    for (int i = k - 1; i >= 0; --i) {
-        double s = g[static_cast<size_t>(i)];
-        for (int j = i + 1; j < k; ++j) s -= H[static_cast<size_t>(i)][static_cast<size_t>(j)] * y[static_cast<size_t>(j)];
-        y[static_cast<size_t>(i)] = s / H[static_cast<size_t>(i)][static_cast<size_t>(i)];
-    }
-    Vec u(n, 0.0);
-    for (int i = 0; i < k; ++i)
-        for (size_t q = 0; q < n; ++q) u[q] += y[static_cast<size_t>(i)] * V[static_cast<size_t>(i)][q];
-    return lu_->solve(u, x);
+    ++n_gmres_rejected_;
+    return false;
 }
 
 bool RotatingSolver::newton_solve(Vec& x) {
@@ -1507,18 +1534,31 @@ bool RotatingSolver::newton_solve(Vec& x) {
             if (!solved) {
                 ++last_refreshes_;
                 // Fresh factorization, climbing the fallback ladder when one breaks down or (if
-                // inexact) does not get GMRES to converge within 3 x gmres_lu_max_iters.
-                for (int level = 0; level < fallback_levels() && !solved; ++level) {
+                // inexact) does not get GMRES to converge within 3 x gmres_lu_max_iters. The climb
+                // starts at the rung that worked last (near folds the weak rungs fail every time)
+                // and steps back down after 5 successes there.
+                int level = std::min(start_level_, fallback_levels() - 1);
+                for (; level < fallback_levels() && !solved; ++level) {
                     if (!factor_entries(jent, level)) continue;
                     if (lu_->exact()) {
                         if (!lu_->solve(rhs, delta)) return false;
                         solved = true;
                     } else {
-                        solved = solve_gmres_lu(jent, rhs, delta, its, 3 * m);
+                        // the two strongest ILUT rungs get restarted GMRES
+                        const int cycles = (precond_ == "ilut" && level >= 2) ? 4 : 1;
+                        solved = solve_gmres_lu(jent, rhs, delta, its, 3 * m, cycles);
                         n_gmres_its_ += its;
                     }
                 }
                 if (!solved) return false;
+                --level;  // the rung that worked
+                if (level > start_level_) {
+                    start_level_ = level;
+                    start_level_streak_ = 0;
+                } else if (start_level_ > 0 && ++start_level_streak_ >= 5) {
+                    --start_level_;
+                    start_level_streak_ = 0;
+                }
             }
         } else {
             fresh = refresh || !lu_valid_;
@@ -1643,8 +1683,10 @@ bool RotatingSolver::run() {
     std::cout << "[info] Newton iterations " << n_newton_its_ << ", GMRES iterations " << n_gmres_its_
               << ", Jacobian factorizations: " << n_factorizations_;
     if (precond_ == "ilut")
-        std::cout << " (fallbacks: " << n_level_[1] << " to a stronger ILUT, " << n_level_[2] << " to float LU)";
+        std::cout << " (fallbacks: " << n_level_[1] << " to ILUT x2, " << n_level_[2] << " to ILUT x4, " << n_level_[3]
+                  << " to ILUT x8, " << n_level_[4] << " to float LU)";
     if (precond_ == "lu_float") std::cout << " (fallbacks: " << n_level_[1] << " to exact LU)";
+    if (n_gmres_rejected_ > 0) std::cout << ", GMRES results rejected on the true residual: " << n_gmres_rejected_;
     std::cout << ", regrids: " << n_regrids_ << "; time: total " << total
               << " s, Jacobian (finite differences) " << t_jac_ << " s, LU factorization " << t_lu_
               << " s, other (residuals, solves, I/O) " << total - t_jac_ - t_lu_ << " s\n";
@@ -1697,6 +1739,13 @@ bool RotatingSolver::run_impl() {
             }
         }
     }
+    if (!p_.init_file.empty() && !p_.init_file_prev.empty() && p_.continuation_mode == "arclength") {
+        const Vec x1 = x_;
+        const double w1 = p_.omega_target;
+        if (load_init_file(p_.init_file_prev)) init_prev_ = x_;
+        x_ = x1;
+        p_.omega_target = w1;
+    }
     const std::string fam = "families2d.dat";
     auto report = [&](const char* tag) {
         const Observables o = observables(x_);
@@ -1704,6 +1753,13 @@ bool RotatingSolver::run_impl() {
                   << "  M = " << o.mass_komar << "  Q = " << o.charge << "  J = " << o.angmom
                   << "  (Newton its " << last_iterations_ << ", |R| " << last_residual_ << ")\n";
     };
+
+    // Two-profile restart: no fixed-omega solve (ill-posed next to a fold); run_arclength
+    // re-converges the pair with the arclength constraint.
+    if (!init_prev_.empty()) {
+        kappa_ = std::max(0.0, p_.kappa_target);
+        return run_arclength(fam);
+    }
 
     // 1. Flat space (kappa = 0) solution at omega_target from the analytic seed. Without
     //    flat-space Q-balls (mini, repulsive) the kappa = 0 problem is linear in phi and only
@@ -1752,7 +1808,8 @@ bool RotatingSolver::run_impl() {
     append_family(fam, x_, true);
     write_profile("bs2d.dat", x_);
 
-    if (p_.continuation_mode == "arclength") return run_arclength(fam);
+    // single_model_phi_max > 0: follow the family by arclength (through folds) to the model with that phi_max.
+    if (p_.continuation_mode == "arclength" || p_.single_model_phi_max > 0.0) return run_arclength(fam);
 
     // 3. March in omega (secant predictor). If charge_target > 0, stop at the first
     //    crossing of Q = charge_target and solve there with the fixed-Q constraint.
@@ -1846,20 +1903,52 @@ bool RotatingSolver::run_arclength(const std::string& fam) {
     // A restart (init_file) may sit next to a fold, where a fixed-omega step in the continuation
     // direction can fail or land off the branch: step backwards instead (the family is single
     // valued on the side it came from) and swap the pair, so the secant points forward.
-    const bool back_start = !p_.init_file.empty();
-    if (back_start) dw = -dw;
-    bool ok = false;
-    for (int tries = 0; tries < 8 && !ok; ++tries) {
-        constraint_ = Constraint::Omega;
-        omega_target_ = w0 - dw;
-        x_ = x_prev;
-        x_.back() = omega_target_;
-        ok = newton_solve(x_);
-        if (!ok) dw *= 0.5;
+    if (!init_prev_.empty()) {
+        // Two-profile restart: re-converge both on this grid with the arclength constraint through
+        // each interpolated state along their secant (as after a regrid), then continue forward.
+        Vec x0 = init_prev_, x1 = x_;
+        Vec t(x1.size());
+        for (size_t k = 0; k < t.size(); ++k) t[k] = x1[k] - x0[k];
+        const double tn = norm(t);
+        for (double& v : t) v /= tn;
+        constraint_ = Constraint::Arclength;
+        for (Vec* X : {&x0, &x1}) {
+            arc_t_ = t;
+            arc_pred_ = *X;
+            x_ = *X;
+            if (!newton_solve(x_)) {
+                std::cout << "[warn] Arclength: re-solving the restart pair failed.\n";
+                return false;
+            }
+            *X = x_;
+        }
+        x_prev = x0;
+        x_ = x1;
+        append_family(fam, x_, true);
+        write_profile("bs2d.dat", x_);
+    }
+    // Right next to the fold the fixed-omega solve can fail both ways; the backward step is tried
+    // first, then the forward one.
+    bool back_start = !p_.init_file.empty();
+    bool ok = !init_prev_.empty();  // a restart pair needs no omega step
+    for (int pass = 0; pass < (back_start ? 2 : 1) && !ok; ++pass) {
+        double d = (back_start && pass == 0) ? -dw : dw;
+        for (int tries = 0; tries < 8 && !ok; ++tries) {
+            constraint_ = Constraint::Omega;
+            omega_target_ = w0 - d;
+            x_ = x_prev;
+            x_.back() = omega_target_;
+            ok = newton_solve(x_);
+            if (!ok) d *= 0.5;
+        }
+        if (ok && back_start && pass == 1) back_start = false;
+        if (!ok && back_start && pass == 0) std::cout << "[warn] Arclength: backward start step failed; trying forward.\n";
     }
     if (!ok) { std::cout << "[warn] Arclength: initial omega step failed.\n"; x_ = x_prev; return false; }
-    if (back_start) std::swap(x_, x_prev);  // x_prev: the backward step; x_: the restart profile
-    else append_family(fam, x_, false);
+    if (init_prev_.empty()) {
+        if (back_start) std::swap(x_, x_prev);  // x_prev: the backward step; x_: the restart profile
+        else append_family(fam, x_, false);
+    }
     report("Arclength start");
 
     Vec x_cur = x_;
@@ -1965,10 +2054,60 @@ bool RotatingSolver::run_arclength(const std::string& fam) {
         ++accepted;
         append_family(fam, x_, false);
         report("Arclength step");
+        if (p_.single_model_phi_max > 0.0) {
+            // Single model: phi_max crossed the target between x_prev and x_cur -> locate it along the
+            // secant. Arclength-constrained solves at position s on the chord (Newton moves the state
+            // onto the hyperplane normal to the chord), secant iteration on s.
+            const double T = p_.single_model_phi_max;
+            const double a0 = observables(x_prev).phi_max, a1 = observables(x_cur).phi_max;
+            if ((a0 - T) * (a1 - T) <= 0.0) {
+                Vec t(x_cur.size());
+                for (size_t k = 0; k < t.size(); ++k) t[k] = x_cur[k] - x_prev[k];
+                const double h = norm(t);
+                for (double& v : t) v /= h;
+                arc_t_ = t;
+                auto at = [&](double sp, Vec& out, double& val) {
+                    arc_pred_.resize(t.size());
+                    const double f = sp / h;
+                    for (size_t k = 0; k < t.size(); ++k) arc_pred_[k] = x_prev[k] + sp * t[k];
+                    out.resize(t.size());
+                    for (size_t k = 0; k < t.size(); ++k) out[k] = (1.0 - f) * x_prev[k] + f * x_cur[k];
+                    x_ = out;
+                    if (!newton_solve(x_)) return false;
+                    out = x_;
+                    val = observables(x_).phi_max;
+                    return true;
+                };
+                double sa = 0.0, fa = a0 - T, sb = h, fb = a1 - T;
+                Vec xs;
+                bool found = false;
+                for (int it = 0; it < 40 && !found; ++it) {
+                    double sp = (fb != fa) ? sa - fa * (sb - sa) / (fb - fa) : 0.5 * (sa + sb);
+                    if (!(sp > std::min(sa, sb) && sp < std::max(sa, sb))) sp = 0.5 * (sa + sb);
+                    double val;
+                    if (!at(sp, xs, val)) { std::cout << "[warn] single model: solve failed on the chord.\n"; x_ = x_cur; return false; }
+                    const double fv = val - T;
+                    std::cout << "[info] single model: phi_max = " << val << " (target " << T << ")\n";
+                    if (std::abs(fv) <= 1e-9 * T) { found = true; break; }
+                    // keep the bracket (regula falsi with bisection fallback)
+                    if (fv * fa > 0.0) { sa = sp; fa = fv; } else { sb = sp; fb = fv; }
+                }
+                if (!found) { std::cout << "[warn] single model: phi_max target not reached to tolerance.\n"; }
+                x_ = xs;
+                constraint_ = Constraint::Omega;  // report / write only
+                report("single model");
+                append_family(fam, x_, false);
+                write_profile("bs2d.dat", x_);
+                return found;
+            }
+        }
         std::cout << "[info]   ds = " << ds << " (ds_max " << ds_max << "), Newton iterations " << iters
                   << ", Jacobian refreshes " << refreshes << "\n";
         // every accepted model with write_bsdata_per_step (restart points via init_file), else every 10th
-        if (p_.write_bsdata_per_step || accepted % 10 == 0) write_profile("bs2d.dat", x_);
+        if (p_.write_bsdata_per_step || accepted % 10 == 0) {
+            write_profile("bs2d.dat", x_);
+            write_profile("bs2d_prev.dat", x_prev);  // with bs2d.dat: a two-profile restart (init_file_prev)
+        }
         if (p_.radial_grid == "adaptive") {
             const RadialMap want = wanted_map(x_cur);
             if (map_drifted(want)) {

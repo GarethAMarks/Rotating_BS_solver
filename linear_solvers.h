@@ -55,7 +55,8 @@ private:
 //   LUFloat  the same in single precision (about half the memory): a preconditioner, since a
 //            solve is only accurate to ~1e-7 x condition number;
 //   ILUT     incomplete LU with threshold dropping (Eigen::IncompleteLUT): a preconditioner whose
-//            size grows roughly linearly with the grid instead of with the LU fill.
+//            size grows roughly linearly with the grid instead of with the LU fill; its factors
+//            can be kept in single precision (set_ilut(..., single = true)).
 class SparseLUSolver {
 public:
     using Entry = SparseEntry;
@@ -67,7 +68,7 @@ public:
 
     // Factor A (not copied for the LU and ILUT kinds; the float LU works on a single-precision
     // copy). Returns false if the factorization fails (for ILUT: a zero pivot). The factorization
-    // of any other kind held before is released first.
+    // held before is released first, so the old and new factors never coexist.
     bool factor(const SparseMatrix& A, Kind kind = Kind::LU);
     // The same from entries (duplicate (row, col) entries are summed).
     bool factor(int n, const std::vector<Entry>& entries, Kind kind = Kind::LU);
@@ -75,8 +76,10 @@ public:
     // within this factor of the column maximum, which reduces fill (SuperLU's diag_pivot_thresh).
     void set_pivot_threshold(double t);
     // ILUT: keep at most fill x (nonzeros of the row of A) entries per row of L and of U, and
-    // drop entries below droptol x (row norm).
-    void set_ilut(double fill, double droptol);
+    // drop entries below droptol x (row norm); single: store the factors in float (2/3 of the
+    // memory per entry; float round-off grows with the condition number, so on ill-conditioned
+    // Jacobians it can dominate the dropping and weaken the preconditioner).
+    void set_ilut(double fill, double droptol, bool single = false);
     // Apply the factorization: x = M^{-1} b (exact solve for Kind::LU).
     bool solve(const std::vector<double>& b, std::vector<double>& x) const;
     Kind kind() const;

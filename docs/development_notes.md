@@ -475,7 +475,9 @@ $\psi_2 = X+iY$, $m = $ `m_azimuthal`/2; `tools/derive_dirac.py`):
     $\omega=0.877$ and then recedes.
 - **All three families** (`runs/onsets.png` from `runs/plot_onsets.py`): $M(\omega)$ for the solitonic
   scalar ($\sigma=0.05$, $m=1$; `runs/lightrings/a200x61_ergo`), Proca and Dirac (ground state)
-  families, with the onsets of light rings (circles) and ergoregions (stars):
+  families, with the onsets of light rings (circles) and ergoregions (stars). The Proca curve now
+  ends with the `runs/proca/m1/end_push` restarts (250x41 solid; 300x41 and 400x41 through
+  $\omega_\mathrm{min}\approx0.4654$ dashed, past the 0.5% Komar/asymptotic-mass cut; inset):
 
   | family | light rings appear | ergoregion appears |
   |---|---|---|
@@ -578,7 +580,9 @@ double-precision Jacobian):
 For the two inexact kinds, the step after a fresh factorization is solved by GMRES, allowed up to
 3x `gmres_lu_max_iters` iterations. A factorization that breaks down, or whose GMRES does not
 converge, climbs a fallback ladder:
-- `ilut`: ILUT, then ILUT with 2x fill and droptol/10, then float LU;
+- `ilut`: ILUT, then ILUT with 2x, 4x and 8x the fill (droptol /10, /100, /1000), then float LU
+  (`ilut_lu_fallback`); the 4x and 8x rungs get up to 4 restarted GMRES cycles, and the next
+  factorization starts at the rung that worked last (back down after 5 successes);
 - `lu_float`: float LU, then exact LU.
 
 The run summary counts the fallbacks. Chord and plain Newton (`newton_linear = chord`,
@@ -621,6 +625,43 @@ Eigen's SparseLU than COLAMD), an adaptive refactor schedule (no gain). Where th
 (200x41 family): ~80% in the LU triangular solves inside GMRES (~19 ms each), ~12% LU
 factorizations. A faster sparse direct solver (SuiteSparse UMFPACK, MKL PARDISO) is the next lever.
 For coarser grids at the same accuracy, see `radial_grid = adaptive`.
+
+## Reaching the end of the Proca $m=1$ family (2026-11-02/03)
+
+Goal: get further along the Proca family than the 250x41 restarts, which stopped at
+$\omega=0.46613$, $C_K=0.4874$ (killed by the 3 GB memory cap). Each idea was benchmarked against
+the best run so far (restart cases under a 3 GB cap without swap). Runs and restart pairs are in
+`runs/proca/m1/end_push/`.
+
+**What actually limited the family end was the linear solve, not only memory.** Dumped Jacobians
+(`BS_DUMP_JACOBIAN`) near the fold, tested offline, gave these results:
+- the default ILUT(20, 1e-5) is *unstable* there: $M^{-1}b$ comes out inf or NaN;
+- GMRES's Givens estimate can still "converge" on such a factor while the iterate is garbage;
+- every line search then failed: the step-size underflows near $\omega\approx0.4666$, and also the
+  failed fixed-$\omega$ start step of a one-file restart.
+
+| change (kept) | effect |
+|---|---|
+| true-residual check after GMRES (reject $> 100\times$ `gmres_lu_tol`) | 250x41 from $\omega=0.469$: $C_K$ 0.4813 → 0.4881 (stop on the first law, i.e. resolution), but 14 float-LU fallbacks, 2.75 GB |
+| ILUT 4x rung (fill 80, droptol 1e-7) before the float LU | $C_K$ 0.4887; 1.96 GB, 2.4x faster, 1 float LU |
+| restarted GMRES (4 cycles, continued from the true residual) on the strong rungs; `ilut_lu_fallback = 0` | 300x41 restart: $C_K$ 0.4938 at 1.31 GB (the float LU would need > 3 GB) |
+| ladder starts at the rung that worked last | same results, 300x41 1858 → 1010 s |
+| two-profile restart (`init_file_prev`, `bs2d_prev.dat`) | 400x41 starts at all (a fixed-$\omega$ solve has no solution there: the finer grid moves the fold) |
+| ILUT 8x rung (fill 160, droptol 1e-8) | 400x41 regrids at $\omega_\mathrm{min}$ succeed; 1.88 GB |
+
+**Result** (400x41): the family passes its frequency minimum, $\omega_\mathrm{min}\approx0.46543$
+(0.46548 before the last regrid), at $C_K\approx0.498$, $J/M^2\approx1.0002$, $M\approx1.0773$.
+It stops on the first-law guard (3%). The Komar and asymptotic masses differ by 1.1–1.4% there,
+so these last models are resolution-limited. Going from 300 to 400 radial points barely improved
+that mismatch, so the next lever is probably $N_\theta$, not $N_r$.
+
+Tried and rejected:
+- natural (grid) ordering for ILUT: twice the fill, still fails;
+- row/column equilibration (max, Ruiz): no effect on the unstable factor;
+- single-precision ILUT factors (`ilut_float`): stalls near strong-gravity family ends;
+- exact block elimination of the border (dense $\omega$ column and arclength row) around an
+  interior ILUT: 85 → 70 GMRES iterations, not pursued;
+- an exact LU with grid nested dissection, already rejected in the memory study above.
 
 ## Next implementation milestones
 

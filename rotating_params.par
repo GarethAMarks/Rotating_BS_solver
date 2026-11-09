@@ -18,6 +18,7 @@ output_prefix = out/bs          # reserved (unused): output goes to the current 
 potential = solitonic               # mini | kkls | solitonic | axionic | repulsive
 matter = scalar                 # rotating solver: scalar (uses potential) | proca (free vector field of mass mu) | dirac (free spinor, m = m_azimuthal/2)
 # init_file = path/bs2d.dat     # optional restart from an earlier profile (any grid; its omega replaces omega_target)
+# init_file_prev = path/bs2d_prev.dat  # with init_file: the model before it -> arclength restart, works at folds
 # seed_file = path              # optional radial seed: r f l g W + all matter columns, or r f l g W psi (Proca m >= 1 / Dirac pattern)
 dirac_parity = -1               # Dirac equatorial reflection D1(pi-theta) = s D4, D2(pi-theta) = s D3: -1 ground state, +1 p-like
 dirac_origin_zero = 0           # Dirac origin: 0 smooth along rays (regular spinor) | 1 P=Q=X=Y=0 (Herdeiro et al. 2019)
@@ -105,6 +106,7 @@ Ntheta = 21                    # theta points on [0, pi/2]; odd -> Simpson quadr
 m_azimuthal = 1
 rot_seed_amp = 0.9             # torus seed phi = amp (rho/R)^m exp(m/2 (1 - rho^2/R^2) - z^2 / (2 R^2))
 rot_seed_width = 2.5           # R
+single_model_phi_max = 0.0     # > 0: build only the model with this phi_max (secant on omega from omega_target, at kappa_target), write bs2d.dat, stop
 rot_omega_stop = 0.3           # omega march (non-arclength): last step lands exactly on this omega
 rot_max_steps = 200            # omega march (non-arclength): max steps
 light_rings = 0                # 1: count equatorial light rings per model (extra families2d.dat column; radii in the log)
@@ -118,9 +120,11 @@ regrid_tol = 0.1               # adaptive: regrid when the wanted map drifts by 
 jacobian_reuse = 1             # reuse the sparse LU factorization across Newton iterations / continuation steps
 newton_linear = gmres_lu       # gmres_lu: fresh Jacobian + GMRES preconditioned by the reused LU | chord
 gmres_lu_max_iters = 25        # refactor when GMRES needs more iterations than this
-linear_preconditioner = ilut   # factorization for gmres_lu: ilut (2-3x less memory; falls back to a stronger ILUT, then float LU) | lu (exact) | lu_float
+linear_preconditioner = ilut   # factorization for gmres_lu: ilut (2-3x less memory; falls back to ILUT x2, x4, x8, then float LU) | lu (exact) | lu_float
 ilut_fill = 20                 # ilut: max entries per row of L, U in units of the row's nonzeros in the Jacobian
 ilut_droptol = 1e-5            # ilut: drop entries below this x the row norm
+ilut_float = 0                 # ilut: single-precision factors (1: ~half the memory, but can stall near the end of strong-gravity families) or double (0)
+ilut_lu_fallback = 1           # ilut: last fallback rung, a float exact LU (1; 2-3 GB at 250x41) or none (0: the Newton step fails, ds is halved)
 gmres_lu_tol = 1e-6            # GMRES relative tolerance (inexact Newton)
 chord_rate = 0.25              # chord: refresh the Jacobian when |R| drops by less than this factor
 lu_pivot_threshold = 0.1       # sparse LU pivoting threshold (< 1 prefers the diagonal: less fill)

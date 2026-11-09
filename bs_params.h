@@ -111,6 +111,13 @@ struct BSParams {
     // and m). Its fields are interpolated onto the new grid (adaptive grids are fitted to it first)
     // and its omega replaces omega_target. Overrides the seeds.
     std::string init_file = "";
+    // With init_file: the model before it (bs2d_prev.dat of the same run). The restart then
+    // re-converges both with the arclength constraint along their secant (well posed at folds)
+    // instead of solving at fixed omega.
+    std::string init_file_prev = "";
+    // Single model (rotating solver): > 0 builds only the model with phi_max = this value (secant on
+    // omega from omega_target, at kappa_target), writes bs2d.dat and stops; no continuation.
+    double single_model_phi_max = 0.0;
     double rot_omega_stop = 0.3;   // omega march: stops exactly at this omega
     int rot_max_steps = 200;       // omega march: maximum number of steps
     // Radial grid (rotating solver): uniform in xi = map(r). "compactified": xi = r/(L+r) with
@@ -142,6 +149,14 @@ struct BSParams {
     std::string linear_preconditioner = "ilut";
     double ilut_fill = 20.0;       // ilut: max entries per row of L and U, in units of the row's nonzeros in J
     double ilut_droptol = 1e-5;    // ilut: drop entries below this x the row norm
+    // ilut: keep the factors in single precision (1: about half the memory and faster, but near the
+    // end of strong-gravity families float round-off spoils the preconditioner and the continuation
+    // stalls) or double (0)
+    int ilut_float = 0;
+    // ilut: last rung of the fallback ladder, a single-precision exact LU (1). It needs several
+    // times the ILUT's memory (2-3 GB at 250x41); 0 skips it, so a matrix that no ILUT rung can
+    // precondition fails the Newton step and the continuation halves its step instead.
+    int ilut_lu_fallback = 1;
     double gmres_lu_tol = 1e-6;    // GMRES relative residual tolerance (inexact Newton; result unaffected)
     double lu_pivot_threshold = 0.1; // sparse LU partial pivoting threshold (< 1 prefers the diagonal: less fill)
     std::string arclength_predictor = "quadratic"; // Newton seed in 2D arclength: quadratic | linear

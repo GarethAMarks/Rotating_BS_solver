@@ -215,8 +215,10 @@ struct SparseLUSolver::Impl {
     std::unique_ptr<Eigen::SparseLU<SpD, Eigen::COLAMDOrdering<int>>> lu;
     std::unique_ptr<Eigen::SparseLU<SpF, Eigen::COLAMDOrdering<int>>> luf;
     std::unique_ptr<Eigen::IncompleteLUT<double>> ilu;
+    std::unique_ptr<Eigen::IncompleteLUT<float>> iluf;
     Kind kind = Kind::LU;
     double pivot = 1.0, fill = 20.0, droptol = 1e-5;
+    bool ilut_single = false;
     std::string err;
     int n = 0;
 };
@@ -232,11 +234,12 @@ bool SparseLUSolver::factor(int n, const std::vector<Entry>& entries, Kind kind)
 }
 
 bool SparseLUSolver::factor(const SparseMatrix& M, Kind kind) {
-    // Release the factorizations of the other kinds before building this one (the kept one of
-    // the same kind reuses its storage).
-    if (kind != Kind::LU) impl_->lu.reset();
-    if (kind != Kind::LUFloat) impl_->luf.reset();
-    if (kind != Kind::ILUT) impl_->ilu.reset();
+    // Release the previous factorization before building this one: the ordering's copies of the
+    // matrix and the new factor would otherwise come on top of the old factor.
+    impl_->lu.reset();
+    impl_->luf.reset();
+    impl_->ilu.reset();
+    impl_->iluf.reset();
     impl_->kind = kind;
     const Eigen::SparseMatrix<double>& A = M.impl_->A;
     const int n = static_cast<int>(A.rows());
@@ -264,7 +267,7 @@ bool SparseLUSolver::factor(const SparseMatrix& M, Kind kind) {
     long nnz_factor = 0;
     const char* name = "LU";
     if (kind == Kind::LU) {
-        if (!impl_->lu) impl_->lu.reset(new Eigen::SparseLU<Impl::SpD, Eigen::COLAMDOrdering<int>>);
+        impl_->lu.reset(new Eigen::SparseLU<Impl::SpD, Eigen::COLAMDOrdering<int>>);
         impl_->lu->setPivotThreshold(impl_->pivot);
         impl_->lu->analyzePattern(A);
         impl_->lu->factorize(A);
@@ -273,7 +276,7 @@ bool SparseLUSolver::factor(const SparseMatrix& M, Kind kind) {
         else nnz_factor = static_cast<long>(impl_->lu->nnzL() + impl_->lu->nnzU());
     } else if (kind == Kind::LUFloat) {
         name = "float LU";
-        if (!impl_->luf) impl_->luf.reset(new Eigen::SparseLU<Impl::SpF, Eigen::COLAMDOrdering<int>>);
+        impl_->luf.reset(new Eigen::SparseLU<Impl::SpF, Eigen::COLAMDOrdering<int>>);
         impl_->luf->setPivotThreshold(static_cast<float>(impl_->pivot));
         const Impl::SpF Af = A.cast<float>();
         impl_->luf->analyzePattern(Af);
@@ -281,9 +284,17 @@ bool SparseLUSolver::factor(const SparseMatrix& M, Kind kind) {
         ok = impl_->luf->info() == Eigen::Success;
         if (!ok) impl_->err = impl_->luf->lastErrorMessage();
         else nnz_factor = static_cast<long>(impl_->luf->nnzL() + impl_->luf->nnzU());
+    } else if (impl_->ilut_single) {
+        name = "float ILUT";
+        impl_->iluf.reset(new Eigen::IncompleteLUT<float>);
+        impl_->iluf->setFillfactor(static_cast<int>(impl_->fill));
+        impl_->iluf->setDroptol(static_cast<float>(impl_->droptol));
+        impl_->iluf->compute(Impl::SpF(A.cast<float>()));
+        ok = impl_->iluf->info() == Eigen::Success;
+        if (!ok) impl_->err = "incomplete LU breakdown (zero pivot)";
     } else {
         name = "ILUT";
-        if (!impl_->ilu) impl_->ilu.reset(new Eigen::IncompleteLUT<double>);
+        impl_->ilu.reset(new Eigen::IncompleteLUT<double>);
         impl_->ilu->setFillfactor(static_cast<int>(impl_->fill));
         impl_->ilu->setDroptol(impl_->droptol);
         impl_->ilu->compute(A);
@@ -316,6 +327,13 @@ bool SparseLUSolver::solve(const std::vector<double>& b, std::vector<double>& x)
         for (int k = 0; k < impl_->n; ++k) x[static_cast<size_t>(k)] = static_cast<double>(xf(k));
         return true;
     }
+    if (impl_->kind == Kind::ILUT && impl_->iluf) {
+        const Eigen::VectorXf bf = bv.cast<float>();
+        const Eigen::VectorXf xf = impl_->iluf->solve(bf);
+        x.resize(static_cast<size_t>(impl_->n));
+        for (int k = 0; k < impl_->n; ++k) x[static_cast<size_t>(k)] = static_cast<double>(xf(k));
+        return true;
+    }
     if (impl_->kind == Kind::ILUT && impl_->ilu) {
         Eigen::VectorXd xv = impl_->ilu->solve(bv);
         x.assign(xv.data(), xv.data() + impl_->n);
@@ -330,7 +348,8 @@ const char* SparseLUSolver::last_error() const { return impl_->err.c_str(); }
 
 void SparseLUSolver::set_pivot_threshold(double t) { impl_->pivot = t; }
 
-void SparseLUSolver::set_ilut(double fill, double droptol) {
+void SparseLUSolver::set_ilut(double fill, double droptol, bool single) {
     impl_->fill = fill;
     impl_->droptol = droptol;
+    impl_->ilut_single = single;
 }
