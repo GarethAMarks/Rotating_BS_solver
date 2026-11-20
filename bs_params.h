@@ -132,6 +132,12 @@ struct BSParams {
     // (max of g_tt over the grid; > 0 iff an ergoregion exists) to families2d.dat, equatorial
     // ergosurface radii in the log.
     bool ergoregion = false;
+    // Rotating solver: with the final model also write bs3d_cartesian.dat, the 3+1 data in Cartesian
+    // components (x, y, z; z = rotation axis) on the spherical polar grid (solver r nodes, theta on
+    // [0, pi], cartesian_nphi points in varphi): lapse, shift, gamma_ij, K_ij and, for scalar
+    // matter, Phi, Pi, rho, S_i. Conventions in the file header and docs/usage_guide.md.
+    bool output_cartesian_values = false;
+    int cartesian_nphi = 16;
     double radial_scale = 1.0;
     double radial_cluster_fraction = 0.4;
     double radial_scale_ratio = 0.5;

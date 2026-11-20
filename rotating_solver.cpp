@@ -1639,6 +1639,120 @@ void RotatingSolver::write_profile(const std::string& path, const Vec& x) const 
         }
 }
 
+void RotatingSolver::write_cartesian(const std::string& path, const Vec& x) const {
+    // 3+1 split of the stationary metric with its own lapse alpha = sqrt(f) and shift
+    // beta^varphi = -W/r, in Cartesian components (x, y, z; z = rotation axis), at t = 0, on the
+    // spherical polar grid: the solver's r nodes (without r = infinity), theta on [0, pi] (the
+    // solver's nodes and their equatorial mirrors), cartesian_nphi points in varphi. Closed forms
+    // (verified against a direct 4D computation by tools/verify_cartesian.py), with
+    //   n = (s cp, s sp, c), th = (c cp, c sp, -s), e = (-sp, cp, 0), A = l g / f, B = l / f:
+    //   gamma_ij = A delta_ij + (B - A) e_i e_j,  beta^i = -W sin(theta) e^i,
+    //   K_ij = a (n_i e_j + e_i n_j) + b (th_i e_j + e_i th_j),  K_ij = -(1/(2 alpha))(d_t gamma_ij - D_i beta_j - D_j beta_i),
+    //   a = -(l s / (2 f^1.5)) (W_r - W/r),  b = -(l s / (2 f^1.5)) W_theta / r,
+    //   Phi = phi e^{i m varphi},  Pi = n^a d_a Phi = i (omega + m W/r) Phi / sqrt(f),
+    //   rho = (omega + m W/r)^2 phi^2 / f + (phi_r^2 + (phi_theta/r)^2) / A + m^2 q^2 / B + U,  q = phi / (r s),
+    //   S_i = -2 m (omega + m W/r) phi q / sqrt(f) e_i.
+    // At r = 0 and on the axis the ratios take their limits for regular fields: W/r -> W_r,
+    // X_theta/r -> X_rtheta (r = 0); q -> phi_theta/(r cos) (axis), phi_r/sin (origin), phi_rtheta/cos (both).
+    const bool scalar = matter_ == Matter::Scalar;
+    const int nphi = std::max(1, p_.cartesian_nphi);
+    const int ntf = 2 * (Nt_ - 1) + 1;  // theta in [0, pi]
+    const double omega = x.back(), m = mval_;
+    std::ofstream out(path);
+    out << "# rotating star 3+1 data, Cartesian components (z = rotation axis), t = 0: matter=" << p_.matter
+        << " potential=" << p_.potential << " m=" << m_ << " kappa=" << std::setprecision(12) << kappa_
+        << " (G = kappa/(8 pi)) omega=" << omega << " mu=" << p_.mu << "\n";
+    out << "# grid: Nr=" << Nr_ - 1 << " Ntheta=" << ntf << " Nphi=" << nphi
+        << " (spherical polar: r = solver nodes, theta = j pi/(Ntheta-1), varphi = k 2pi/Nphi; rows ordered i, j, k with k fastest)\n";
+    out << "# conventions: ds^2 = -alpha^2 dt^2 + gamma_ij (dx^i + beta^i dt)(dx^j + beta^j dt);"
+           " K_ij = -(1/(2 alpha)) (d_t gamma_ij - D_i beta_j - D_j beta_i);\n";
+    out << "#   Hamiltonian constraint R + K^2 - K_ij K^ij = 2 kappa rho; momentum D_j (K^j_i - delta^j_i K) = kappa S_i\n";
+    if (scalar)
+        out << "#   scalar: action -dPhi* dPhi - U(|Phi|), Phi = phi(r,theta) e^{i(omega t + m varphi)}; Pi = n^a d_a Phi"
+               " = (d_t Phi - beta^i d_i Phi)/alpha; rho = n^a n^b T_ab, S_i = -gamma_i^a n^b T_ab\n";
+    else
+        out << "#   matter columns are written for scalar matter only\n";
+    out << "# r theta varphi x y z alpha beta_x beta_y beta_z gxx gxy gxz gyy gyz gzz Kxx Kxy Kxz Kyy Kyz Kzz";
+    if (scalar) out << " Phi_re Phi_im Pi_re Pi_im rho Sx Sy Sz";
+    out << "\n" << std::scientific << std::setprecision(12);
+    std::vector<double> cph(static_cast<size_t>(nphi)), sph(static_cast<size_t>(nphi));
+    for (int k = 0; k < nphi; ++k) {
+        const double vp = 2.0 * M_PI * k / nphi;
+        cph[static_cast<size_t>(k)] = std::cos(vp);
+        sph[static_cast<size_t>(k)] = std::sin(vp);
+    }
+    for (int i = 0; i + 1 < Nr_; ++i) {
+        const double r = r_[static_cast<size_t>(i)];
+        for (int jf = 0; jf < ntf; ++jf) {
+            // theta > pi/2: the mirror node j of the solver grid, fields times their equatorial parity
+            const bool mirror = jf > Nt_ - 1;
+            const int j = mirror ? 2 * (Nt_ - 1) - jf : jf;
+            const double th = (jf == ntf - 1) ? M_PI : M_PI * jf / (ntf - 1);
+            const double s = (jf == 0 || jf == ntf - 1) ? 0.0 : std::sin(th), c = std::cos(th);
+            // value, d_r, d_theta, d_r d_theta of field a at (r, th)
+            auto fld = [&](int a, double& v, double& dr, double& dt, double& drt) {
+                double d2, a1, a2, ad;
+                v = x[idx(i, j, a)];
+                deriv_r(x, i, j, a, dr, d2, a1, a2);
+                deriv_t(x, i, j, a, dt, d2, a1, a2);
+                deriv_rt(x, i, j, a, drt, ad);
+                if (mirror) {
+                    const double sg = (eq_sign_[a] < 0) ? -1.0 : 1.0;  // F(pi - th) = sg F(th)
+                    v *= sg; dr *= sg; dt *= -sg; drt *= -sg;
+                }
+            };
+            double f, l, g, W, fr, ft, frt, dum;
+            fld(F_f, f, fr, ft, frt);
+            fld(F_l, l, dum, dum, dum);
+            fld(F_g, g, dum, dum, dum);
+            double Wr, Wt, Wrt;
+            fld(F_W, W, Wr, Wt, Wrt);
+            const double Wor = (i == 0) ? Wr : W / r;       // W / r
+            const double Wtor = (i == 0) ? Wrt : Wt / r;    // W_theta / r
+            const double sf = std::sqrt(f), A = l * g / f, B = l / f;
+            const double kc = -l * s / (2.0 * f * sf);
+            const double ka = kc * (Wr - Wor), kb = kc * Wtor;
+            double p = 0, pr = 0, ptor = 0, q = 0, U = 0;
+            if (scalar) {
+                double pt, prt;
+                fld(F_p, p, pr, pt, prt);
+                ptor = (i == 0) ? prt : pt / r;
+                if (i > 0 && s > 0.0) q = p / (r * s);
+                else if (i > 0) q = pt / (r * c);
+                else if (s > 0.0) q = pr / s;
+                else q = prt / c;
+                if (m == 0.0) q = 0.0;
+                U = potential_U(p_, std::abs(p));
+            }
+            const double wq = omega + m * Wor;
+            const double rho = scalar ? wq * wq * p * p / f + (pr * pr + ptor * ptor) / A + m * m * q * q / B + U : 0.0;
+            const double Se = scalar ? -2.0 * m * wq * p * q / sf : 0.0;  // S_i = Se e_i
+            for (int k = 0; k < nphi; ++k) {
+                const double cp = cph[static_cast<size_t>(k)], sp = sph[static_cast<size_t>(k)];
+                const double n[3] = {s * cp, s * sp, c}, tv[3] = {c * cp, c * sp, -s}, e[3] = {-sp, cp, 0.0};
+                out << r << ' ' << th << ' ' << 2.0 * M_PI * k / nphi << ' ' << r * n[0] << ' ' << r * n[1] << ' '
+                    << r * n[2] << ' ' << sf;
+                for (int a = 0; a < 3; ++a) out << ' ' << -W * s * e[a];
+                static const int ij[6][2] = {{0, 0}, {0, 1}, {0, 2}, {1, 1}, {1, 2}, {2, 2}};
+                for (const auto& p2 : ij)
+                    out << ' ' << (p2[0] == p2[1] ? A : 0.0) + (B - A) * e[p2[0]] * e[p2[1]];
+                for (const auto& p2 : ij) {
+                    const int a = p2[0], b = p2[1];
+                    out << ' ' << ka * (n[a] * e[b] + e[a] * n[b]) + kb * (tv[a] * e[b] + e[a] * tv[b]);
+                }
+                if (scalar) {
+                    const double cm = std::cos(m * 2.0 * M_PI * k / nphi), sm = std::sin(m * 2.0 * M_PI * k / nphi);
+                    // Pi = i (wq / sqrt f) Phi
+                    out << ' ' << p * cm << ' ' << p * sm << ' ' << -wq / sf * p * sm << ' ' << wq / sf * p * cm << ' ' << rho;
+                    for (int a = 0; a < 3; ++a) out << ' ' << Se * e[a];
+                }
+                out << '\n';
+            }
+        }
+    }
+    std::cout << "[info] wrote " << path << " (" << Nr_ - 1 << " x " << ntf << " x " << nphi << " points)\n";
+}
+
 void RotatingSolver::append_family(const std::string& path, const Vec& x, bool header) const {
     std::ofstream out(path, header ? std::ios::trunc : std::ios::app);
     if (header) {
@@ -1679,6 +1793,7 @@ void RotatingSolver::append_family(const std::string& path, const Vec& x, bool h
 bool RotatingSolver::run() {
     const auto t0 = std::chrono::steady_clock::now();
     const bool ok = run_impl();
+    if (ok && p_.output_cartesian_values) write_cartesian("bs3d_cartesian.dat", x_);
     const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     std::cout << "[info] Newton iterations " << n_newton_its_ << ", GMRES iterations " << n_gmres_its_
               << ", Jacobian factorizations: " << n_factorizations_;

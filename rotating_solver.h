@@ -219,6 +219,9 @@ private:
     RadialMap init_map_;
 
     void write_profile(const std::string& path, const Vec& x) const;
+    // 3+1 data in Cartesian components on the spherical polar grid (output_cartesian_values);
+    // closed forms verified by tools/verify_cartesian.py.
+    void write_cartesian(const std::string& path, const Vec& x) const;
     void append_family(const std::string& path, const Vec& x, bool header) const;
 };
 

@@ -142,7 +142,43 @@ numbers use a finer grid (e.g. 200×41 with `radial_grid = adaptive`) and compar
 the radial map. $\phi$ is the last column for scalar matter. The metric functions $f, l, g, W$ are
 those of the Kleihaus–Kunz ansatz (see the README's conventions section).
 
-## 7. Practical tips
+## 7. Cartesian 3+1 data (for evolution codes)
+
+Add
+
+```
+output_cartesian_values = 1
+cartesian_nphi = 16
+```
+
+and the run also writes **`bs3d_cartesian.dat`** for its final model: lapse, shift, $\gamma_{ij}$ and
+$K_{ij}$ in Cartesian components ($z$ = rotation axis), and for scalar matter $\Phi$, $\Pi$, $\rho$,
+$S_i$, on a spherical polar grid (the solver's radial nodes, $\theta\in[0,\pi]$, `cartesian_nphi`
+values of $\varphi$). The header gives $\kappa$, $\omega$, the grid sizes and the conventions; the
+columns are listed in the README's output-files section. Rows run over $r$, then $\theta$, then
+$\varphi$ (fastest), so in numpy:
+
+```python
+import numpy as np
+d = np.loadtxt("bs3d_cartesian.dat").reshape(Nr, Ntheta, Nphi, -1)   # sizes from the header line
+```
+
+- Combine it with a single model (section 5) or a fixed-$\omega$ run to get initial data for one star.
+- $\Pi=(\partial_t\Phi-\beta^i\partial_i\Phi)/\alpha$, i.e. $\partial_t\Phi=\alpha\Pi+\beta^i\partial_i\Phi$. The
+  field normalization is the solver's (action $-\partial\bar\Phi\,\partial\Phi-U$); a code using
+  $-\tfrac12[(\partial\phi_{\rm Re})^2+(\partial\phi_{\rm Im})^2]$ needs $\phi_{\rm Re}+i\phi_{\rm Im}=\sqrt2\,\Phi$.
+- Units: $\mu=1$; $G=\kappa/8\pi$ ($G=1$ at the usual $\kappa=8\pi$).
+- The grid is the solver's, so the radial spacing is non-uniform; interpolate onto your own grid.
+- Check a file (or a resolution sequence, coarse to fine, from runs with `Nr-1` and `Ntheta-1`
+  doubled):
+
+  ```bash
+  python3 tools/check_cartesian_constraints.py run1/bs3d_cartesian.dat run2/bs3d_cartesian.dat
+  ```
+
+  It prints the Hamiltonian and momentum constraint norms and their convergence order.
+
+## 8. Practical tips
 
 - Start with a coarse grid (100×21) to see whether the setup works, then refine.
 - One directory per run; redirect the log (`> log`) and look for `[warn]` lines.

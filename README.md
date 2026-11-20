@@ -260,6 +260,23 @@ All files are written to the current directory.
   `i j r theta f l g W <fields>`. The header records $\omega$ and the radial map.
 - **`bs2d_prev.dat`**: the model before it, in the same format. With `bs2d.dat` it makes a
   two-profile restart (`init_file_prev`).
+- **`bs3d_cartesian.dat`** (with `output_cartesian_values = 1`): the final model as 3+1 data in
+  Cartesian components ($z$ = rotation axis, $t=0$), on a spherical polar grid: the solver's $r$
+  nodes, $\theta\in[0,\pi]$ and `cartesian_nphi` values of $\varphi$. Lapse and shift are those of
+  the metric ansatz ($\alpha=\sqrt f$, $\beta^\varphi=-W/r$). Columns
+
+  ```
+  r theta varphi x y z alpha beta_x beta_y beta_z gxx gxy gxz gyy gyz gzz Kxx Kxy Kxz Kyy Kyz Kzz
+  [Phi_re Phi_im Pi_re Pi_im rho Sx Sy Sz]          (scalar matter only)
+  ```
+
+  with $K_{ij}=-\frac1{2\alpha}(\partial_t\gamma_{ij}-D_i\beta_j-D_j\beta_i)$,
+  $\Pi=n^a\partial_a\Phi=(\partial_t\Phi-\beta^i\partial_i\Phi)/\alpha$, $\rho=n^an^bT_{ab}$,
+  $S_i=-\gamma_i{}^an^bT_{ab}$, so that $R+K^2-K_{ij}K^{ij}=2\kappa\rho$ and
+  $D_j(K^j{}_i-\delta^j{}_iK)=\kappa S_i$. The field normalization is the solver's (action
+  $-\partial\bar\Phi\,\partial\Phi-U$). Written once, for the final model of a successful run (about
+  60 MB at 129×25 with `cartesian_nphi = 16`). `tools/check_cartesian_constraints.py` evaluates the
+  constraints from it; see [validation](#validation).
 
 **1D solver:**
 - **`families.dat`**: one line per model. Columns
@@ -427,6 +444,8 @@ These change speed and memory, not the solutions.
 |---|---|---|
 | `light_rings` | `0` | `1`: find the equatorial light rings (circular photon orbits) of every model: count in the `light_rings` column; circumferential radii in $M$, co- or counter-rotating, in the log. |
 | `ergoregion` | `0` | `1`: report the largest $g_{tt}=-f+l\sin^2\theta\,W^2/f$ on the grid (`ergo_gtt_max`; $>0$ means an ergoregion). The equatorial ergosurface radii go in the log. |
+| `output_cartesian_values` | `0` | `1`: also write `bs3d_cartesian.dat` for the final model (3+1 data in Cartesian components on a spherical polar grid; see [output files](#output-files)). Matter columns for scalar matter only. |
+| `cartesian_nphi` | `16` | Number of $\varphi$ points in `bs3d_cartesian.dat` (`1`: the $\varphi=0$ half-plane). The constraint checker needs an even value $\ge 8$. |
 
 ## Environment variables
 
@@ -449,6 +468,8 @@ and rebuild:
 | `tools/derive_matter.py proca --codegen` | `proca_equations.inc`, `proca_densities.inc` | the coefficient combinations reproduce the scalar equations exactly; the Proca equations proper (no gauge terms) |
 | `tools/derive_dirac.py --full --codegen` | `dirac_equations.inc`, `dirac_densities.inc` | the $\gamma$ representation in which the Dirac ansatz is consistent (`--rep`, `--pairing`); the spin connection is flat in flat space |
 | `tools/proca_spherical.py` | – | independent shooting code for spherical Proca stars; `--seed` writes isotropic seed profiles |
+| `tools/verify_cartesian.py` | – | the closed forms of `bs3d_cartesian.dat` (lapse, shift, $\gamma_{ij}$, $K_{ij}$, $\Phi$, $\Pi$, $\rho$, $S_i$) against a direct computation from the 4-metric written in Cartesian coordinates; the limits used at the origin and on the axis |
+| `tools/check_cartesian_constraints.py` | – | Hamiltonian and momentum constraints and stationarity ($\partial_t\gamma_{ij}$, $\partial_t\Phi-i\omega\Phi$) evaluated from `bs3d_cartesian.dat` files alone; with several nested resolutions, the convergence order |
 
 Run them from `tools/`; they write the `.inc` files to the repository root.
 
@@ -470,6 +491,7 @@ Selected checks; the full record is in [`docs/development_notes.md`](docs/develo
 | Dirac $m=\frac12$ vs Herdeiro et al. (2019) | all of the paper's frequencies reproduced ($\omega_{\min}=0.680$, $M_{\max}$ at 0.80); the paper's $M$, $J$, $Q$ are exactly twice ours, see below |
 | weak-field limit of Proca $m=1$ and Dirac ground-state families | $M\to$ Schrödinger–Newton ground state $\sqrt{(1-\omega)/0.16276}$ to $10^{-4}$ (Proca) and $2\times10^{-3}$ (Dirac) |
 | identities along every family | $J=mQ$ ($10^{-5}$), Komar = asymptotic mass, first law $dM=\omega\,dQ$ |
+| `bs3d_cartesian.dat`, mini $m=1$, $\omega=0.9$, grids 65×13 → 129×25 → 257×49 | Hamiltonian and momentum constraints from the Cartesian data: relative $L^2$ norms $2.7\times10^{-4}\to1.7\times10^{-5}\to1.1\times10^{-6}$ and $1.1\times10^{-4}\to7.2\times10^{-6}\to4.5\times10^{-7}$, order 3.99 for both; $\partial_t\gamma_{ij}$ order 4.0 |
 ## Practical tips
 
 - **Starting a scalar family.** Start at a moderately relativistic model ($\omega\approx0.8$–0.9) and

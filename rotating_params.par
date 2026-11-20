@@ -111,6 +111,8 @@ rot_omega_stop = 0.3           # omega march (non-arclength): last step lands ex
 rot_max_steps = 200            # omega march (non-arclength): max steps
 light_rings = 0                # 1: count equatorial light rings per model (extra families2d.dat column; radii in the log)
 ergoregion = 0                 # 1: max g_tt per model (column ergo_gtt_max; > 0: ergoregion; ergosurface radii in the log)
+output_cartesian_values = 0    # 1: also write bs3d_cartesian.dat for the final model: lapse, shift, gamma_ij, K_ij (Cartesian components), scalar Phi, Pi, rho, S_i
+cartesian_nphi = 16            # varphi points of bs3d_cartesian.dat (1: the varphi = 0 half-plane only)
 radial_grid = compactified     # compactified: xi = r/(L+r), L = radial_scale | adaptive: points clustered on the star's wall, follows the solution
 radial_scale = 1.0             # compactified: L (half the radial points lie inside r < L)
 radial_cluster_fraction = 0.4  # adaptive: fraction of radial points in the wall cluster
