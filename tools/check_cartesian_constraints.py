@@ -17,9 +17,13 @@ radial indices 4 .. Nr-5 and away from the poles (the chain rule has 1/sin(theta
 3 .. Ntheta-4.
 
 Usage: python3 tools/check_cartesian_constraints.py bs3d_cartesian.dat [more files, coarse to fine]
+       [--kappa K --omega W]
+kappa and omega come from the bs2d.dat written next to each file (same model) unless given.
 With several files (solver runs at Nr-1 and Ntheta-1 doubling each time, same radial map and Nphi)
 the norms are taken on the points of the coarsest grid, for a convergence order.
 """
+import argparse
+import os
 import re
 import sys
 import numpy as np
@@ -27,15 +31,31 @@ import numpy as np
 C4 = np.array([1 / 12, -2 / 3, 0.0, 2 / 3, -1 / 12])
 
 
-def load(path):
-    with open(path) as fh:
-        head = [next(fh) for _ in range(2)]
-    kappa = float(re.search(r'kappa=(\S+)', head[0]).group(1))
-    omega = float(re.search(r'omega=(\S+)', head[0]).group(1))
-    nr, nt, nph = (int(re.search(k + r'=(\d+)', head[1]).group(1)) for k in ('Nr', 'Ntheta', 'Nphi'))
+def model_params(path, kappa=None, omega=None):
+    """kappa and omega: from the command line, else from the header of bs2d.dat next to the file
+    (the solver writes both for the same model)."""
+    if kappa is None or omega is None:
+        prof = os.path.join(os.path.dirname(os.path.abspath(path)), 'bs2d.dat')
+        if not os.path.exists(prof):
+            raise SystemExit(f"{path}: no bs2d.dat next to it; give --kappa and --omega")
+        with open(prof) as fh:
+            head = fh.readline()
+        kappa = float(re.search(r'kappa=(\S+)', head).group(1)) if kappa is None else kappa
+        omega = float(re.search(r'omega=(\S+)', head).group(1)) if omega is None else omega
+    return kappa, omega
+
+
+def load(path, kappa=None, omega=None):
+    kappa, omega = model_params(path, kappa, omega)
     d = np.loadtxt(path, comments='#')
     if d.shape[1] < 30:
         raise SystemExit(f"{path}: no matter columns (scalar matter only)")
+    # grid sizes from the coordinate columns (rows ordered r, theta, varphi, varphi fastest)
+    nph = int(np.argmax(d[1:, 2] <= d[0, 2])) + 1 if np.any(d[1:, 2] <= d[0, 2]) else len(d)
+    nt = len(np.unique(d[:, 1]))
+    nr = len(d) // (nt * nph)
+    if nr * nt * nph != len(d):
+        raise SystemExit(f"{path}: rows do not form an r x theta x varphi grid")
     return kappa, omega, d.reshape(nr, nt, nph, d.shape[1])
 
 
@@ -159,11 +179,12 @@ def norms(r, th, H, Hs, M, Ms, E, Es, P, Ps, mask):
     return out
 
 
-def main(paths):
+def main(paths, kappa=None, omega=None):
     res = []
     for p in paths:
-        kappa, omega, D = load(p)
-        res.append((p, D) + constraints(kappa, omega, D))
+        kap, om, D = load(p, kappa, omega)
+        print(f"{p}: {D.shape[0]} x {D.shape[1]} x {D.shape[2]} points, kappa = {kap:.12g}, omega = {om:.12g}")
+        res.append((p, D) + constraints(kap, om, D))
     # common points: those of the first (coarsest) file
     D0 = res[0][1]
     r0, th0 = D0[:, 0, 0, 0], D0[0, :, 0, 1]
@@ -196,6 +217,9 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        raise SystemExit(__doc__)
-    main(sys.argv[1:])
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('files', nargs='+', help='bs3d_cartesian.dat files, coarse to fine')
+    ap.add_argument('--kappa', type=float, help='gravitational coupling (default: from bs2d.dat next to each file)')
+    ap.add_argument('--omega', type=float, help='frequency (default: from bs2d.dat next to each file)')
+    a = ap.parse_args()
+    main(a.files, a.kappa, a.omega)

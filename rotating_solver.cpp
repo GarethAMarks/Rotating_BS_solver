@@ -1620,8 +1620,8 @@ bool RotatingSolver::newton_solve(Vec& x) {
 
 void RotatingSolver::write_profile(const std::string& path, const Vec& x) const {
     std::ofstream out(path);
-    out << "# rotating star profile: matter=" << p_.matter << " potential=" << p_.potential << " m=" << m_ << " kappa=" << kappa_
-        << " omega=" << std::setprecision(12) << x.back() << "\n";
+    out << "# rotating star profile: matter=" << p_.matter << " potential=" << p_.potential << " m=" << m_ << " kappa=" << std::setprecision(12) << kappa_
+        << " omega=" << x.back() << "\n";
     out << "# radial map xi(r): L=" << map_.L;
     for (int k = 0; k < 2; ++k) {
         const RadialMap::Cluster& cl = map_.cl[static_cast<size_t>(k)];
@@ -1659,19 +1659,14 @@ void RotatingSolver::write_cartesian(const std::string& path, const Vec& x) cons
     const int ntf = 2 * (Nt_ - 1) + 1;  // theta in [0, pi]
     const double omega = x.back(), m = mval_;
     std::ofstream out(path);
-    out << "# rotating star 3+1 data, Cartesian components (z = rotation axis), t = 0: matter=" << p_.matter
-        << " potential=" << p_.potential << " m=" << m_ << " kappa=" << std::setprecision(12) << kappa_
-        << " (G = kappa/(8 pi)) omega=" << omega << " mu=" << p_.mu << "\n";
-    out << "# grid: Nr=" << Nr_ - 1 << " Ntheta=" << ntf << " Nphi=" << nphi
-        << " (spherical polar: r = solver nodes, theta = j pi/(Ntheta-1), varphi = k 2pi/Nphi; rows ordered i, j, k with k fastest)\n";
+    // Header: the metric and scalar conventions, then the column labels. kappa and omega are in the
+    // header of bs2d.dat, written with the same model; the grid sizes follow from the r, theta, varphi
+    // columns (rows ordered r, theta, varphi, varphi fastest).
     out << "# conventions: ds^2 = -alpha^2 dt^2 + gamma_ij (dx^i + beta^i dt)(dx^j + beta^j dt);"
-           " K_ij = -(1/(2 alpha)) (d_t gamma_ij - D_i beta_j - D_j beta_i);\n";
-    out << "#   Hamiltonian constraint R + K^2 - K_ij K^ij = 2 kappa rho; momentum D_j (K^j_i - delta^j_i K) = kappa S_i\n";
+           " K_ij = -(1/(2 alpha)) (d_t gamma_ij - D_i beta_j - D_j beta_i)\n";
     if (scalar)
         out << "#   scalar: action -dPhi* dPhi - U(|Phi|), Phi = phi(r,theta) e^{i(omega t + m varphi)}; Pi = n^a d_a Phi"
                " = (d_t Phi - beta^i d_i Phi)/alpha; rho = n^a n^b T_ab, S_i = -gamma_i^a n^b T_ab\n";
-    else
-        out << "#   matter columns are written for scalar matter only\n";
     out << "# r theta varphi x y z alpha beta_x beta_y beta_z gxx gxy gxz gyy gyz gzz Kxx Kxy Kxz Kyy Kyz Kzz";
     if (scalar) out << " Phi_re Phi_im Pi_re Pi_im rho Sx Sy Sz";
     out << "\n" << std::scientific << std::setprecision(12);
@@ -1793,7 +1788,10 @@ void RotatingSolver::append_family(const std::string& path, const Vec& x, bool h
 bool RotatingSolver::run() {
     const auto t0 = std::chrono::steady_clock::now();
     const bool ok = run_impl();
-    if (ok && p_.output_cartesian_values) write_cartesian("bs3d_cartesian.dat", x_);
+    if (ok && p_.output_cartesian_values) {
+        write_profile("bs2d.dat", x_);  // the same model: its header carries kappa and omega
+        write_cartesian("bs3d_cartesian.dat", x_);
+    }
     const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     std::cout << "[info] Newton iterations " << n_newton_its_ << ", GMRES iterations " << n_gmres_its_
               << ", Jacobian factorizations: " << n_factorizations_;

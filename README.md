@@ -274,7 +274,9 @@ All files are written to the current directory.
   $\Pi=n^a\partial_a\Phi=(\partial_t\Phi-\beta^i\partial_i\Phi)/\alpha$, $\rho=n^an^bT_{ab}$,
   $S_i=-\gamma_i{}^an^bT_{ab}$, so that $R+K^2-K_{ij}K^{ij}=2\kappa\rho$ and
   $D_j(K^j{}_i-\delta^j{}_iK)=\kappa S_i$. The field normalization is the solver's (action
-  $-\partial\bar\Phi\,\partial\Phi-U$). Written once, for the final model of a successful run (about
+  $-\partial\bar\Phi\,\partial\Phi-U$). The header holds these conventions and the column labels;
+  $\kappa$ and $\omega$ are in the header of `bs2d.dat`, rewritten with the same model. Rows run over
+  $r$, $\theta$, $\varphi$ ($\varphi$ fastest). Written once, for the final model of a successful run (about
   60 MB at 129×25 with `cartesian_nphi = 16`). `tools/check_cartesian_constraints.py` evaluates the
   constraints from it; see [validation](#validation).
 

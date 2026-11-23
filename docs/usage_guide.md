@@ -154,13 +154,16 @@ cartesian_nphi = 16
 and the run also writes **`bs3d_cartesian.dat`** for its final model: lapse, shift, $\gamma_{ij}$ and
 $K_{ij}$ in Cartesian components ($z$ = rotation axis), and for scalar matter $\Phi$, $\Pi$, $\rho$,
 $S_i$, on a spherical polar grid (the solver's radial nodes, $\theta\in[0,\pi]$, `cartesian_nphi`
-values of $\varphi$). The header gives $\kappa$, $\omega$, the grid sizes and the conventions; the
-columns are listed in the README's output-files section. Rows run over $r$, then $\theta$, then
+values of $\varphi$). The header holds the metric and scalar conventions and the column labels
+(listed in the README's output-files section). $\kappa$ and $\omega$ are in the header of
+`bs2d.dat`, which the run rewrites with the same model. Rows run over $r$, then $\theta$, then
 $\varphi$ (fastest), so in numpy:
 
 ```python
 import numpy as np
-d = np.loadtxt("bs3d_cartesian.dat").reshape(Nr, Ntheta, Nphi, -1)   # sizes from the header line
+d = np.loadtxt("bs3d_cartesian.dat")
+Nphi, Ntheta = len(np.unique(d[:, 2])), len(np.unique(d[:, 1]))
+d = d.reshape(-1, Ntheta, Nphi, d.shape[1])                       # [i_r, j_theta, k_varphi, column]
 ```
 
 - Combine it with a single model (section 5) or a fixed-$\omega$ run to get initial data for one star.
