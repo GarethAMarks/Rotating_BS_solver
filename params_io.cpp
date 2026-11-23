@@ -99,6 +99,7 @@ BSParams read_params(const std::string& file_path) {
         fill_parameter(line, std::string("light_rings = "), p.light_rings, true);
         fill_parameter(line, std::string("ergoregion = "), p.ergoregion, true);
         fill_parameter(line, std::string("output_cartesian_values = "), p.output_cartesian_values, true);
+        fill_parameter(line, std::string("full_cartesian_grid = "), p.full_cartesian_grid, true);
         fill_parameter(line, std::string("cartesian_nphi = "), p.cartesian_nphi, true);
         fill_parameter(line, std::string("radial_scale = "), p.radial_scale, true);
         fill_parameter(line, std::string("radial_cluster_fraction = "), p.radial_cluster_fraction, true);

@@ -1643,7 +1643,8 @@ void RotatingSolver::write_cartesian(const std::string& path, const Vec& x) cons
     // 3+1 split of the stationary metric with its own lapse alpha = sqrt(f) and shift
     // beta^varphi = -W/r, in Cartesian components (x, y, z; z = rotation axis), at t = 0, on the
     // spherical polar grid: the solver's r nodes (without r = infinity), theta on [0, pi] (the
-    // solver's nodes and their equatorial mirrors), cartesian_nphi points in varphi. Closed forms
+    // solver's nodes and their equatorial mirrors), varphi = 0 only or (full_cartesian_grid)
+    // cartesian_nphi points in varphi. Closed forms
     // (verified against a direct 4D computation by tools/verify_cartesian.py), with
     //   n = (s cp, s sp, c), th = (c cp, c sp, -s), e = (-sp, cp, 0), A = l g / f, B = l / f:
     //   gamma_ij = A delta_ij + (B - A) e_i e_j,  beta^i = -W sin(theta) e^i,
@@ -1655,7 +1656,7 @@ void RotatingSolver::write_cartesian(const std::string& path, const Vec& x) cons
     // At r = 0 and on the axis the ratios take their limits for regular fields: W/r -> W_r,
     // X_theta/r -> X_rtheta (r = 0); q -> phi_theta/(r cos) (axis), phi_r/sin (origin), phi_rtheta/cos (both).
     const bool scalar = matter_ == Matter::Scalar;
-    const int nphi = std::max(1, p_.cartesian_nphi);
+    const int nphi = p_.full_cartesian_grid ? std::max(1, p_.cartesian_nphi) : 1;
     const int ntf = 2 * (Nt_ - 1) + 1;  // theta in [0, pi]
     const double omega = x.back(), m = mval_;
     std::ofstream out(path);
@@ -1667,6 +1668,10 @@ void RotatingSolver::write_cartesian(const std::string& path, const Vec& x) cons
     if (scalar)
         out << "#   scalar: action -dPhi* dPhi - U(|Phi|), Phi = phi(r,theta) e^{i(omega t + m varphi)}; Pi = n^a d_a Phi"
                " = (d_t Phi - beta^i d_i Phi)/alpha; rho = n^a n^b T_ab, S_i = -gamma_i^a n^b T_ab\n";
+    if (nphi == 1)
+        out << "# varphi = 0 half-plane (y = 0, x >= 0). At azimuth varphi, with R = rotation by varphi about z:"
+               " beta^i, S_i -> R v; gamma_ij, K_ij -> R T R^T; (Phi, Pi) -> e^{i m varphi} (Phi, Pi), m = "
+            << mval_ << "; alpha, rho unchanged\n";
     out << "# r theta varphi x y z alpha beta_x beta_y beta_z gxx gxy gxz gyy gyz gzz Kxx Kxy Kxz Kyy Kyz Kzz";
     if (scalar) out << " Phi_re Phi_im Pi_re Pi_im rho Sx Sy Sz";
     out << "\n" << std::scientific << std::setprecision(12);

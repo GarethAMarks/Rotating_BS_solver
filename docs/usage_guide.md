@@ -148,14 +148,14 @@ Add
 
 ```
 output_cartesian_values = 1
-cartesian_nphi = 16
 ```
 
 and the run also writes **`bs3d_cartesian.dat`** for its final model: lapse, shift, $\gamma_{ij}$ and
 $K_{ij}$ in Cartesian components ($z$ = rotation axis), and for scalar matter $\Phi$, $\Pi$, $\rho$,
-$S_i$, on a spherical polar grid (the solver's radial nodes, $\theta\in[0,\pi]$, `cartesian_nphi`
-values of $\varphi$). The header holds the metric and scalar conventions and the column labels
-(listed in the README's output-files section). $\kappa$ and $\omega$ are in the header of
+$S_i$, on the solver's radial nodes and $\theta\in[0,\pi]$ in the half-plane $\varphi=0$ ($y=0$,
+$x\ge0$). The header holds the metric and scalar conventions, the rule giving any other azimuth by a
+rotation about $z$, and the column labels (listed in the README's output-files section). With
+`full_cartesian_grid = 1` (and `cartesian_nphi = 16`, say) the file holds that many azimuths instead. $\kappa$ and $\omega$ are in the header of
 `bs2d.dat`, which the run rewrites with the same model. Rows run over $r$, then $\theta$, then
 $\varphi$ (fastest), so in numpy:
 
@@ -164,6 +164,15 @@ import numpy as np
 d = np.loadtxt("bs3d_cartesian.dat")
 Nphi, Ntheta = len(np.unique(d[:, 2])), len(np.unique(d[:, 1]))
 d = d.reshape(-1, Ntheta, Nphi, d.shape[1])                       # [i_r, j_theta, k_varphi, column]
+```
+
+For the default $\varphi=0$ file, `Nphi = 1`. To get azimuth $\varphi$, with
+`R = [[cos, -sin, 0], [sin, cos, 0], [0, 0, 1]]`:
+
+```python
+v = d[..., 7:10] @ R.T                         # beta^i (likewise x y z, cols 3:6, and S_i, cols 27:30)
+# gamma_ij (cols 10:16, order xx xy xz yy yz zz) and K_ij (16:22): T -> R T R^T
+Phi = (d[..., 22] + 1j * d[..., 23]) * np.exp(1j * m * varphi)   # likewise Pi (cols 24, 25)
 ```
 
 - Combine it with a single model (section 5) or a fixed-$\omega$ run to get initial data for one star.
@@ -179,7 +188,9 @@ d = d.reshape(-1, Ntheta, Nphi, d.shape[1])                       # [i_r, j_thet
   python3 tools/check_cartesian_constraints.py run1/bs3d_cartesian.dat run2/bs3d_cartesian.dat
   ```
 
-  It prints the Hamiltonian and momentum constraint norms and their convergence order.
+  It prints the Hamiltonian and momentum constraint norms and their convergence order. A
+  $\varphi=0$ file is rotated onto 16 azimuths first (`--nphi` to change), so this also checks the
+  rotation rule.
 
 ## 8. Practical tips
 

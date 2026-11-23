@@ -133,10 +133,12 @@ struct BSParams {
     // ergosurface radii in the log.
     bool ergoregion = false;
     // Rotating solver: with the final model also write bs3d_cartesian.dat, the 3+1 data in Cartesian
-    // components (x, y, z; z = rotation axis) on the spherical polar grid (solver r nodes, theta on
-    // [0, pi], cartesian_nphi points in varphi): lapse, shift, gamma_ij, K_ij and, for scalar
-    // matter, Phi, Pi, rho, S_i. Conventions in the file header and docs/usage_guide.md.
+    // components (x, y, z; z = rotation axis) on the solver's r nodes and theta in [0, pi]: lapse,
+    // shift, gamma_ij, K_ij and, for scalar matter, Phi, Pi, rho, S_i. By default only the varphi = 0
+    // half-plane (the header gives the rotation rule for other varphi); full_cartesian_grid = 1 writes
+    // cartesian_nphi values of varphi. Conventions in the file header and docs/usage_guide.md.
     bool output_cartesian_values = false;
+    bool full_cartesian_grid = false;
     int cartesian_nphi = 16;
     double radial_scale = 1.0;
     double radial_cluster_fraction = 0.4;

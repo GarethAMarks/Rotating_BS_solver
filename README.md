@@ -261,8 +261,13 @@ All files are written to the current directory.
 - **`bs2d_prev.dat`**: the model before it, in the same format. With `bs2d.dat` it makes a
   two-profile restart (`init_file_prev`).
 - **`bs3d_cartesian.dat`** (with `output_cartesian_values = 1`): the final model as 3+1 data in
-  Cartesian components ($z$ = rotation axis, $t=0$), on a spherical polar grid: the solver's $r$
-  nodes, $\theta\in[0,\pi]$ and `cartesian_nphi` values of $\varphi$. Lapse and shift are those of
+  Cartesian components ($z$ = rotation axis, $t=0$), on the solver's $r$ nodes and
+  $\theta\in[0,\pi]$, in the half-plane $\varphi=0$ ($y=0$, $x\ge0$). Other azimuths follow by a
+  rotation $R(\varphi)$ about $z$, given in the header: $\beta^i,S_i\to Rv$;
+  $\gamma_{ij},K_{ij}\to RTR^{\mathsf T}$; $(\Phi,\Pi)\to e^{im\varphi}(\Phi,\Pi)$; $\alpha,\rho$
+  unchanged. (The geometry is axisymmetric, but Cartesian components of vectors and tensors still
+  vary with $\varphi$, and so does $\Phi$.) With `full_cartesian_grid = 1` the file holds
+  `cartesian_nphi` values of $\varphi$ instead. Lapse and shift are those of
   the metric ansatz ($\alpha=\sqrt f$, $\beta^\varphi=-W/r$). Columns
 
   ```
@@ -274,11 +279,12 @@ All files are written to the current directory.
   $\Pi=n^a\partial_a\Phi=(\partial_t\Phi-\beta^i\partial_i\Phi)/\alpha$, $\rho=n^an^bT_{ab}$,
   $S_i=-\gamma_i{}^an^bT_{ab}$, so that $R+K^2-K_{ij}K^{ij}=2\kappa\rho$ and
   $D_j(K^j{}_i-\delta^j{}_iK)=\kappa S_i$. The field normalization is the solver's (action
-  $-\partial\bar\Phi\,\partial\Phi-U$). The header holds these conventions and the column labels;
+  $-\partial\bar\Phi\,\partial\Phi-U$). The header holds these conventions, the rotation rule and the column labels;
   $\kappa$ and $\omega$ are in the header of `bs2d.dat`, rewritten with the same model. Rows run over
-  $r$, $\theta$, $\varphi$ ($\varphi$ fastest). Written once, for the final model of a successful run (about
-  60 MB at 129×25 with `cartesian_nphi = 16`). `tools/check_cartesian_constraints.py` evaluates the
-  constraints from it; see [validation](#validation).
+  $r$, $\theta$, $\varphi$ ($\varphi$ fastest). Written once, for the final model of a successful run
+  (3.6 MB at 129×25; 16× that with `full_cartesian_grid = 1`, `cartesian_nphi = 16`).
+  `tools/check_cartesian_constraints.py` evaluates the constraints from it (a $\varphi=0$ file is
+  first rotated onto 16 azimuths with the header's rule); see [validation](#validation).
 
 **1D solver:**
 - **`families.dat`**: one line per model. Columns
@@ -447,7 +453,8 @@ These change speed and memory, not the solutions.
 | `light_rings` | `0` | `1`: find the equatorial light rings (circular photon orbits) of every model: count in the `light_rings` column; circumferential radii in $M$, co- or counter-rotating, in the log. |
 | `ergoregion` | `0` | `1`: report the largest $g_{tt}=-f+l\sin^2\theta\,W^2/f$ on the grid (`ergo_gtt_max`; $>0$ means an ergoregion). The equatorial ergosurface radii go in the log. |
 | `output_cartesian_values` | `0` | `1`: also write `bs3d_cartesian.dat` for the final model (3+1 data in Cartesian components on a spherical polar grid; see [output files](#output-files)). Matter columns for scalar matter only. |
-| `cartesian_nphi` | `16` | Number of $\varphi$ points in `bs3d_cartesian.dat` (`1`: the $\varphi=0$ half-plane). The constraint checker needs an even value $\ge 8$. |
+| `full_cartesian_grid` | `0` | `0`: `bs3d_cartesian.dat` holds the $\varphi=0$ half-plane, with the rotation rule for other $\varphi$ in its header. `1`: `cartesian_nphi` values of $\varphi$. |
+| `cartesian_nphi` | `16` | With `full_cartesian_grid = 1`: number of $\varphi$ points. The constraint checker needs an even value $\ge 8$. |
 
 ## Environment variables
 

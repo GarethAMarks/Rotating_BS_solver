@@ -17,8 +17,10 @@ radial indices 4 .. Nr-5 and away from the poles (the chain rule has 1/sin(theta
 3 .. Ntheta-4.
 
 Usage: python3 tools/check_cartesian_constraints.py bs3d_cartesian.dat [more files, coarse to fine]
-       [--kappa K --omega W]
+       [--kappa K --omega W] [--nphi N]
 kappa and omega come from the bs2d.dat written next to each file (same model) unless given.
+A varphi = 0 file (the default output) is first rotated onto N = 16 values of varphi with the rule in
+its header (m from that header), so the checks also test that rule.
 With several files (solver runs at Nr-1 and Ntheta-1 doubling each time, same radial map and Nphi)
 the norms are taken on the points of the coarsest grid, for a convergence order.
 """
@@ -45,7 +47,35 @@ def model_params(path, kappa=None, omega=None):
     return kappa, omega
 
 
-def load(path, kappa=None, omega=None):
+def rotate_slice(D, m, nph):
+    """varphi = 0 data (nr, nt, 1, ncol) -> nph values of varphi, by the rule in the file header:
+    beta, S -> R v; gamma, K -> R T R^T; (Phi, Pi) -> e^{i m varphi} (Phi, Pi); alpha, rho unchanged."""
+    out = np.repeat(D, nph, axis=2)
+    comp = [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2)]
+    for k in range(nph):
+        vp = 2 * np.pi * k / nph
+        c, s = np.cos(vp), np.sin(vp)
+        R = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+        S0 = D[:, :, 0]
+        O = out[:, :, k]
+        O[..., 2] = vp
+        for c0 in (3, 7, 27):                      # x y z, beta^i, S_i
+            O[..., c0:c0 + 3] = S0[..., c0:c0 + 3] @ R.T
+        for c0 in (10, 16):                        # gamma_ij, K_ij
+            T = np.zeros(S0.shape[:2] + (3, 3))
+            for q, (a, b) in enumerate(comp):
+                T[..., a, b] = T[..., b, a] = S0[..., c0 + q]
+            T = R @ T @ R.T
+            for q, (a, b) in enumerate(comp):
+                O[..., c0 + q] = T[..., a, b]
+        ph = np.exp(1j * m * vp)
+        for c0 in (22, 24):                        # Phi, Pi
+            z = (S0[..., c0] + 1j * S0[..., c0 + 1]) * ph
+            O[..., c0], O[..., c0 + 1] = z.real, z.imag
+    return out
+
+
+def load(path, kappa=None, omega=None, nphi=16):
     kappa, omega = model_params(path, kappa, omega)
     d = np.loadtxt(path, comments='#')
     if d.shape[1] < 30:
@@ -56,7 +86,15 @@ def load(path, kappa=None, omega=None):
     nr = len(d) // (nt * nph)
     if nr * nt * nph != len(d):
         raise SystemExit(f"{path}: rows do not form an r x theta x varphi grid")
-    return kappa, omega, d.reshape(nr, nt, nph, d.shape[1])
+    D = d.reshape(nr, nt, nph, d.shape[1])
+    if nph == 1:
+        with open(path) as fh:
+            head = ''.join(l for l in fh if l.startswith('#'))
+        mm = re.search(r'm = (\S+);', head)
+        if not mm:
+            raise SystemExit(f"{path}: a single varphi but no rotation rule in the header")
+        D = rotate_slice(D, float(mm.group(1)), nphi)
+    return kappa, omega, D
 
 
 def d_index(u, axis):
@@ -179,12 +217,13 @@ def norms(r, th, H, Hs, M, Ms, E, Es, P, Ps, mask):
     return out
 
 
-def main(paths, kappa=None, omega=None):
+def main(paths, kappa=None, omega=None, nphi=16):
     res = []
     for p in paths:
-        kap, om, D = load(p, kappa, omega)
+        kap, om, D = load(p, kappa, omega, nphi)
         print(f"{p}: {D.shape[0]} x {D.shape[1]} x {D.shape[2]} points, kappa = {kap:.12g}, omega = {om:.12g}")
-        res.append((p, D) + constraints(kap, om, D))
+        with np.errstate(divide='ignore', invalid='ignore'):  # 1/sin(theta) at the poles (excluded)
+            res.append((p, D) + constraints(kap, om, D))
     # common points: those of the first (coarsest) file
     D0 = res[0][1]
     r0, th0 = D0[:, 0, 0, 0], D0[0, :, 0, 1]
@@ -221,5 +260,6 @@ if __name__ == "__main__":
     ap.add_argument('files', nargs='+', help='bs3d_cartesian.dat files, coarse to fine')
     ap.add_argument('--kappa', type=float, help='gravitational coupling (default: from bs2d.dat next to each file)')
     ap.add_argument('--omega', type=float, help='frequency (default: from bs2d.dat next to each file)')
+    ap.add_argument('--nphi', type=int, default=16, help='varphi points for a varphi = 0 file (even, >= 8)')
     a = ap.parse_args()
-    main(a.files, a.kappa, a.omega)
+    main(a.files, a.kappa, a.omega, a.nphi)
