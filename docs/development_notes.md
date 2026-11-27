@@ -690,9 +690,24 @@ outside the star (the error then sits at $r\approx0.01$–$0.05$ and propagates 
 in $\ln f$), $0.015$ squeezes the far field again. Finite $N_r$ biases $J/M^2$ low with
 $c=0.1$ and high with $c=0.03$, so the two bracket the converged value.
 
-**Tried and rejected:** a logarithmic band of nodes (density $\propto1/r$) from the wall to
-$\sim M$, taking 15–20% of the points from the compactification. It was no better than the floor at 600
-points and worse at 400 (it takes points from the near-star region, which carries the error).
+**Tried first:** a logarithmic band from the wall's outer edge to $\sim M$ next to the clusters, taking 15–20% of the points from the compactification. It was no better than the floor (see the next paragraph for the version that works).
+
+**Logarithmic radial band (kept, `radial_log_fraction`).** The clusters are uniform in $r$ and must
+follow the core as it shrinks geometrically (about 18% per regrid); every regrid moved $J/M^2$ by
+$10^{-5}$–$10^{-4}$, growing as the core shrank. A band with node density $\propto 1/(r+c_1)$ from
+$c_1$ = 0.1 × the core scale (snapped to powers of 4) out to $c_2=M$, holding 60% of the points with
+the clusters off, gives every scale the same points per e-fold. Results for $m=3$:
+- the end state of the old 600-point run ($\omega=0.4195$), restarted on the log grid at 600 points:
+  $J/M^2=0.999971$, against the Richardson value $0.99997\pm2\times10^{-5}$ from the cluster grids
+  at 400–1200 points;
+- whole families from the seed: 400 and 600 points agree to $6\times10^{-6}$ in $J/M^2$ at the old
+  stopping point, where the cluster grids at 400 points were off by $4\times10^{-4}$; 10 and 21 min
+  (solver clock, 1 and 2 threads);
+- a restart pushed on to $2\omega M/m-1=2.5\times10^{-4}$ ($\phi$ peaked at $r=0.0016$, ten times
+  further in than before; $f(0)=6\times10^{-8}$). $M$ still rises (3.57917) and $J/M^2$ drifts down
+  to 0.99996. The runs now stop on the first-law guard because the steps become physically tiny
+  ($\Delta M\sim10^{-5}$ per step while the core shrinks), not because of regrid jumps.
+The band has to start well inside the core and replace the clusters.
 
 **Results** ($J/M^2$ with Komar $M$; Richardson extrapolation over fixed maps with $N_r$ = 400–1200):
 - every family approaches the extremal-Kerr limit: $J/M^2\to1$ together with $2\omega M/m\to1$

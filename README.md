@@ -362,6 +362,10 @@ is used, so check the summary the solver prints at start-up.
 | `radial_cluster_fraction` | `0.4` | 2D | Adaptive: fraction of radial points in the clusters. |
 | `radial_scale_ratio` | `0.5` | 2D | Adaptive: $L$ = this × the outer edge of the wall cluster. |
 | `radial_scale_min_mass` | `0` | 2D | Adaptive: floor $L\ge$ this × $M$ (Komar); `0` = off. Deep in a family the star shrinks in isotropic $r$ while the exterior metric still varies on $r\sim M$; without the floor $L$ shrinks with the star and the exterior is squeezed into the last few nodes, which gives jumps in $M$, $\omega$, $J/M^2$ at each regrid and early first-law stops. `0.03` works for the near-extremal ends of rotating mini families. |
+| `radial_log_fraction` | `0` | 2D | Adaptive: fraction of the radial points in a logarithmic band (node density $\propto1/(r+c_1)$) from $c_1$ to $c_2$; `0` = off. For the very compact, still-shrinking cores at the end of mini families: every scale from inside the core out to $r\sim M$ gets the same points per e-fold, so the core can shrink by `radial_log_quantum` before a regrid. With `radial_cluster_fraction = 0`, `0.6` reproduces the Richardson-extrapolated $J/M^2$ of the old grid (within its $2\times10^{-5}$) at 600 points, and 400 and 600 points agree to $6\times10^{-6}$. |
+| `radial_log_inner` | `0.1` | 2D | $c_1$ = this × the core scale (the core cluster's edge, else the wall's), rounded down to a power of `radial_log_quantum`. |
+| `radial_log_quantum` | `4` | 2D | $c_1$ moves only in factors of this, so a geometrically shrinking core regrids rarely. |
+| `radial_log_outer_mass` | `1` | 2D | $c_2$ = this × $M$ (Komar). |
 | `regrid_tol` | `0.1` | 2D | Adaptive: regrid when the wanted map has drifted by more than this, relative to the cluster width or $L$. |
 | `fd_order` | `5` | – | Reserved; currently unused. The stencils are fixed (fourth order). |
 

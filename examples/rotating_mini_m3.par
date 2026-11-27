@@ -1,12 +1,13 @@
 # Rotating mini boson stars with m = 3, kappa = 8 pi, from the analytic torus seed straight into
 # arclength continuation toward lower omega, down to the near-extremal end of the family
-# (omega ~ 0.4196, M ~ 3.578, J/M^2 -> 1, 87 models). About 11 min (solver clock) on one core.
-# J/M^2 there is resolution-limited at the 1e-4 level (this grid reads ~1.0003; the extrapolated
-# value at omega = 0.4195 is 0.99997): compare several Nr before trusting the last few models.
+# (omega ~ 0.4193, M ~ 3.5791, 2 omega M / m - 1 ~ 5e-4, J/M^2 = 0.99996; 97 models). About 10 min
+# (solver clock) on one core; 600 radial points agree with these 400 to 6e-6 in J/M^2.
 # Seeds for higher m start at omega = 0.95, where the star is nearly Newtonian; the torus seed
 # needs a radius close to the star's: rot_seed_width = 12-16 (m = 3), 20 (m = 4, 5), amp 0.01.
-# Nr matters, Ntheta does not (31 and 81 agree to 1e-5). radial_scale_min_mass keeps the
-# exterior (r ~ M) resolved once the star has shrunk to r << M in isotropic coordinates.
+# Nr matters, Ntheta does not (31 and 81 agree to 1e-5). The radial grid is mostly a logarithmic
+# band (radial_log_fraction): the core keeps shrinking geometrically near the end of the family,
+# and a log band resolves it without the regrid jumps of the point clusters.
+# radial_scale_min_mass keeps the far field (r >> M) resolved.
 # Run from the repository root:  ./rotating_bs_solver examples/rotating_mini_m3.par
 sequence_mode = rotating
 continuation_mode = arclength
@@ -18,6 +19,8 @@ Ntheta = 31
 radial_grid = adaptive
 radial_scale = 5
 radial_scale_min_mass = 0.03
+radial_log_fraction = 0.6
+radial_cluster_fraction = 0
 kappa_target = 25.132741228718345
 omega_target = 0.95
 rot_seed_amp = 0.01

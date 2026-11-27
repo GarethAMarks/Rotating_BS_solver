@@ -149,6 +149,13 @@ struct BSParams {
     // 0.03 suited the near-extremal ends of the mini m = 2-4 families (0.1 and up starve the region
     // just outside the star; 0.015 squeezes the far field again).
     double radial_scale_min_mass = 0.0;
+    // Adaptive: logarithmic band of radial nodes (density ~ 1/r), a fraction radial_log_fraction of
+    // the points (0: off), from c1 = radial_log_inner x the core scale (rounded down to a power of
+    // radial_log_quantum) out to c2 = radial_log_outer_mass x M. For very compact, shrinking cores.
+    double radial_log_fraction = 0.0;
+    double radial_log_inner = 0.1;
+    double radial_log_quantum = 4.0;
+    double radial_log_outer_mass = 1.0;
     double regrid_tol = 0.1;
     bool jacobian_reuse = true;    // chord Newton: reuse the factored Jacobian (see newton_solve)
     double chord_rate = 0.25;      // refresh the Jacobian when |R| drops by less than this factor

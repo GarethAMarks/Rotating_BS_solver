@@ -24,7 +24,11 @@
 //   B_k' = (tanh((r-ra)/delta) - tanh((r-rb)/delta))/2.
 // Smooth and analytic (xi, xi', xi''), so finite differences in xi stay 4th order. L = 1 without
 // clusters is the original map xi = r/(1+r). Cluster 0: core (symmetric about r = 0); cluster 1:
-// the star's outer wall.
+// the star's outer wall. Optional logarithmic band (beta_log > 0): node density ~ 1/(r + c1) between
+// c1 and c2, B_log(r) = ln((1 + r/c1)/(1 + r/c2)), B_log(inf) = ln(c2/c1). With c1 well inside the
+// core it resolves every scale from the core out to r ~ c2 with the same nodes per e-fold, so a core
+// that keeps shrinking geometrically (the near-extremal end of a family) needs no regrid until it
+// approaches c1. B_log' = 1/(r+c1) - 1/(r+c2) falls off as 1/r^2: xi keeps its 1/r form at infinity.
 struct RadialMap {
     struct Cluster {
         double beta = 0.0, ra = 0.0, rb = 1.0, delta = 1.0;
@@ -33,10 +37,12 @@ struct RadialMap {
     };
     double L = 1.0;
     std::array<Cluster, 2> cl;
+    double beta_log = 0.0, c1 = 1.0, c2 = 10.0;  // logarithmic band (off when beta_log = 0)
     double xi(double r) const;
     void derivs(double r, double& xi_r, double& xi_rr) const;  // d xi/dr, d^2 xi/dr^2
     double r_of_xi(double xi) const;                           // inverse (xi < 1)
-    double beta_sum() const { return cl[0].beta + cl[1].beta; }
+    double beta_sum() const { return cl[0].beta + cl[1].beta + beta_log; }
+    double log_fraction() const { return beta_log / (1.0 + beta_sum()); }
     double fraction(int k) const { return cl[static_cast<size_t>(k)].beta / (1.0 + beta_sum()); }
 };
 
