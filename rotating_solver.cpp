@@ -371,6 +371,14 @@ void RotatingSolver::setup_matter() {
         if (m_ != 1)
             std::cout << "[warn] Dirac: the pole conditions are derived for m = 1/2 (m_azimuthal = 1) only.\n";
     }
+    for (int a = 0; a < NF_MAX; ++a) {
+        axis_zero_[a] = (axis_sign_[a] < 0);
+        pole2_zero_[a] = (eq_sign_[a] < 0);
+    }
+    // A regular scalar phi(r, theta) e^{i m varphi} goes like sin^m(theta) at the poles: the ghost
+    // parity is (-1)^m, but phi = 0 on the axis for every m >= 1 (for even m, d_theta phi = 0 alone
+    // would admit a nonzero axis value).
+    if (matter_ == Matter::Scalar && m_ >= 1) axis_zero_[F_p] = pole2_zero_[F_p] = true;
 }
 
 void RotatingSolver::seed_analytic() {
@@ -812,7 +820,7 @@ void RotatingSolver::node_rows(const Vec& x, int i, int j, double* Rn, double* S
         set(idx(i, j, F_g), gv - 1.0, std::abs(gv) + 1.0);
         rv = row_d1t0(i, F_W, sc); set(idx(i, j, F_W), rv, sc);
         for (int a = 4; a < nf_; ++a) {
-            if (axis_sign_[a] > 0) { rv = row_d1t0(i, a, sc); set(idx(i, j, a), rv, sc); }
+            if (!axis_zero_[a]) { rv = row_d1t0(i, a, sc); set(idx(i, j, a), rv, sc); }
             else set_zero(a);
         }
         return;
@@ -824,7 +832,7 @@ void RotatingSolver::node_rows(const Vec& x, int i, int j, double* Rn, double* S
         set(idx(i, j, F_g), gv - 1.0, std::abs(gv) + 1.0);
         rv = row_d1tN(i, F_W, sc); set(idx(i, j, F_W), rv, sc);
         for (int a = 4; a < nf_; ++a) {
-            if (eq_sign_[a] > 0) { rv = row_d1tN(i, a, sc); set(idx(i, j, a), rv, sc); }
+            if (!pole2_zero_[a]) { rv = row_d1tN(i, a, sc); set(idx(i, j, a), rv, sc); }
             else set_zero(a);
         }
         return;

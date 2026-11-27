@@ -98,6 +98,11 @@ private:
     int axis_sign_[NF_MAX] = {1, 1, 1, 1, 1, 1, 1, 1};
     int eq_sign_[NF_MAX] = {1, 1, 1, 1, 1, 1, 1, 1};
     bool origin_neumann_[NF_MAX] = {false, false, false, false, false, false, false, false};
+    // Pole rows (theta = 0; pole2: theta = pi with theta_full_): true -> the field is 0 there, false ->
+    // d_theta = 0. Odd fields by default; regularity can also force even ones to vanish (scalar, even
+    // m >= 2: phi ~ sin^m theta is even across the axis but still 0 on it).
+    bool axis_zero_[NF_MAX] = {false, false, false, false, false, false, false, false};
+    bool pole2_zero_[NF_MAX] = {false, false, false, false, false, false, false, false};
     // Equatorial reflection partner: the ghost of field a beyond the equator is eq_sign_[a] times
     // field eq_partner_[a] at the mirrored node (Dirac: D1 <-> D4, D2 <-> D3; otherwise a itself).
     // Partnered fields: on the equator the second of each pair gets the row  field - partner = 0.
