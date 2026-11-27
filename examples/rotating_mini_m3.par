@@ -1,0 +1,29 @@
+# Rotating mini boson stars with m = 3, kappa = 8 pi, from the analytic torus seed straight into
+# arclength continuation toward lower omega, down to the near-extremal end of the family
+# (omega ~ 0.4196, M ~ 3.578, J/M^2 -> 1, 87 models). About 11 min (solver clock) on one core.
+# J/M^2 there is resolution-limited at the 1e-4 level (this grid reads ~1.0003; the extrapolated
+# value at omega = 0.4195 is 0.99997): compare several Nr before trusting the last few models.
+# Seeds for higher m start at omega = 0.95, where the star is nearly Newtonian; the torus seed
+# needs a radius close to the star's: rot_seed_width = 12-16 (m = 3), 20 (m = 4, 5), amp 0.01.
+# Nr matters, Ntheta does not (31 and 81 agree to 1e-5). radial_scale_min_mass keeps the
+# exterior (r ~ M) resolved once the star has shrunk to r << M in isotropic coordinates.
+# Run from the repository root:  ./rotating_bs_solver examples/rotating_mini_m3.par
+sequence_mode = rotating
+continuation_mode = arclength
+potential = mini
+matter = scalar
+m_azimuthal = 3
+Nr = 400
+Ntheta = 31
+radial_grid = adaptive
+radial_scale = 5
+radial_scale_min_mass = 0.03
+kappa_target = 25.132741228718345
+omega_target = 0.95
+rot_seed_amp = 0.01
+rot_seed_width = 12
+delta_omega = 0.01
+arclength_max_steps = 600
+first_law_tol = 0.02
+wall_resolution_tol = 0.5
+max_newton_iters = 30

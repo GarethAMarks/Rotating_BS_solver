@@ -104,6 +104,7 @@ BSParams read_params(const std::string& file_path) {
         fill_parameter(line, std::string("radial_scale = "), p.radial_scale, true);
         fill_parameter(line, std::string("radial_cluster_fraction = "), p.radial_cluster_fraction, true);
         fill_parameter(line, std::string("radial_scale_ratio = "), p.radial_scale_ratio, true);
+        fill_parameter(line, std::string("radial_scale_min_mass = "), p.radial_scale_min_mass, true);
         fill_parameter(line, std::string("regrid_tol = "), p.regrid_tol, true);
         fill_parameter(line, std::string("jacobian_reuse = "), p.jacobian_reuse, true);
         fill_parameter(line, std::string("chord_rate = "), p.chord_rate, true);

@@ -227,6 +227,12 @@ RadialMap RotatingSolver::wanted_map(const Vec& x) const {
     if (hi <= 0.0) return map_;  // no profile to adapt to
     RadialMap m;
     m.L = std::max(1e-3, p_.radial_scale_ratio * hi);
+    if (p_.radial_scale_min_mass > 0.0) {
+        // The exterior metric varies on r ~ M: keep it resolved when the star itself has shrunk to
+        // r << M in isotropic coordinates (the strongly relativistic end of a family).
+        const double M = observables(x).mass_komar;
+        if (M > 0.0) m.L = std::max(m.L, p_.radial_scale_min_mass * M);
+    }
     const double c = std::min(0.95, std::max(0.0, p_.radial_cluster_fraction));
     RadialMap::Cluster& cw = m.cl[1];
     cw.ra = std::max(0.0, lo);

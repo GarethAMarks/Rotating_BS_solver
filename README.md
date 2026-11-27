@@ -361,6 +361,7 @@ is used, so check the summary the solver prints at start-up.
 | `radial_scale` | `1.0` | 2D | $L$ of the compactified map: half the radial points lie inside $r<L$. For adaptive grids, the $L$ of the first solve. |
 | `radial_cluster_fraction` | `0.4` | 2D | Adaptive: fraction of radial points in the clusters. |
 | `radial_scale_ratio` | `0.5` | 2D | Adaptive: $L$ = this × the outer edge of the wall cluster. |
+| `radial_scale_min_mass` | `0` | 2D | Adaptive: floor $L\ge$ this × $M$ (Komar); `0` = off. Deep in a family the star shrinks in isotropic $r$ while the exterior metric still varies on $r\sim M$; without the floor $L$ shrinks with the star and the exterior is squeezed into the last few nodes, which gives jumps in $M$, $\omega$, $J/M^2$ at each regrid and early first-law stops. `0.03` works for the near-extremal ends of rotating mini families. |
 | `regrid_tol` | `0.1` | 2D | Adaptive: regrid when the wanted map has drifted by more than this, relative to the cluster width or $L$. |
 | `fd_order` | `5` | – | Reserved; currently unused. The stencils are fixed (fourth order). |
 

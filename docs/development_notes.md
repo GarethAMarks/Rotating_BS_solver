@@ -663,6 +663,60 @@ Tried and rejected:
   interior ILUT: 85 → 70 GMRES iterations, not pursued;
 - an exact LU with grid nested dissection, already rejected in the memory study above.
 
+## Rotating mini boson stars with $m\ge3$ near the extremal limit (2026-11-27)
+
+Goal: follow the mini ($\kappa=8\pi$) families for $m=3,4,5$ far enough to see whether any model past
+the first mass maximum has $J/M^2>1$. Runs in `runs/` (not committed); summary and plots in the
+project report.
+
+**Seeds.** The torus seed at $\omega=0.9$ collapses to the vacuum or stalls for $m\ge3$. Starting
+nearer the Newtonian limit works: $\omega=0.95$, `rot_seed_amp = 0.01`, `rot_seed_width` 12–16
+($m=3$) and 20 ($m=4,5$). The solved stars peak at $r\approx 6m+2$ with an angular half-width
+$\approx0.39,0.31,0.24$ rad for $m=3,4,5$; the seed is about twice as wide in $\theta$, which is why
+the basin narrows with $m$. Example: `examples/rotating_mini_m3.par`.
+
+**What stopped the families.** Deep in the family the star shrinks in isotropic $r$ (core edge
+$\sim0.01$, wall $\sim0.03$) while $M\approx3.6$: a throat forms outside it, $f$ falls to $10^{-5}$
+at the centre and varies over decades out to $r\sim M$. The adaptive map's $L=0.5\,r_{\rm wall}$
+followed the star down ($L\approx0.08$), leaving the exterior to the last few nodes. Every regrid then
+moved $M$, $\omega$ and $J/M^2$ by more than a continuation step (jumps $1.6\times10^{-3}$ →
+$2.4\times10^{-2}$ in $M$ at 200×41), the first-law guard stopped the run, and restarts at 200/300/400
+points disagreed by $2\times10^{-2}$ in $J/M^2$. $N_\theta$ is irrelevant here (41 vs 81: $10^{-5}$);
+$N_r$ is the only lever.
+
+**Fix kept:** `radial_scale_min_mass`, a floor $L\ge c\,M$ (Komar). With fixed maps the solutions
+converge at 3rd–5th order in $N_r$. The best floor is $c\approx0.03$: $0.1$–$0.5$ starve the region just
+outside the star (the error then sits at $r\approx0.01$–$0.05$ and propagates outward as an offset
+in $\ln f$), $0.015$ squeezes the far field again. Finite $N_r$ biases $J/M^2$ low with
+$c=0.1$ and high with $c=0.03$, so the two bracket the converged value.
+
+**Tried and rejected:** a logarithmic band of nodes (density $\propto1/r$) from the wall to
+$\sim M$, taking 15–20% of the points from the compactification. It was no better than the floor at 600
+points and worse at 400 (it takes points from the near-star region, which carries the error).
+
+**Results** ($J/M^2$ with Komar $M$; Richardson extrapolation over fixed maps with $N_r$ = 400–1200):
+- every family approaches the extremal-Kerr limit: $J/M^2\to1$ together with $2\omega M/m\to1$
+  ($\omega/m\to\Omega_H=1/2M$). Along a family $d(J/M^2)=(m\,dQ/M^2)(1-2\omega Q/M)$, from $J=mQ$ and
+  $dM=\omega\,dQ$, so $J/M^2$ is stationary only at $Q$ extrema (cusps) or where $2\omega Q=M$;
+- $m=2$: $M_{\max}=2.2154$ at $\omega=0.6354$ ($J/M^2=0.9798$), $\omega_{\min}=0.5123$. On the unstable
+  branch $J/M^2$ rises monotonically toward 1 from below: $0.999991\pm3\times10^{-6}$ at
+  $\omega=0.52101$, $0.999997\pm5\times10^{-6}$ at the deepest model ($2\omega M/m-1=3.5\times10^{-4}$).
+  The apparent maxima at fixed resolution ($0.99996$ at 400 points with $c=0.1$, $1.00005$ at 600 with
+  $c=0.03$) are discretization error;
+- $m=3$: $J/M^2$ decreases monotonically from 1.99 ($\omega=0.95$) and crosses 1 near $\omega\approx0.42$;
+  $0.99997\pm2\times10^{-5}$ at $\omega=0.4195$. $M$ is still rising there (3.5790), with
+  $2\omega M/m-1=8\times10^{-4}$: no mass maximum before the throat limit at the reachable resolution;
+- $m=4,5$ (400 points): the same picture, $M$ rising monotonically to 5.245 ($\omega=0.382$) and
+  6.947 ($\omega=0.361$). At fixed resolution with $c=0.03$, $J/M^2$ reads about $1+3\times10^{-4}$
+  shortly before the end, but for $m=4$ the deepest model ($\omega=0.38186$,
+  $2\omega M/m-1=1.4\times10^{-3}$) extrapolates to $J/M^2=0.99990\pm1\times10^{-5}$
+  ($N_r$ = 400/600/800/1200: 0.999826, 0.999854, 0.999879, 0.999894);
+- open: whether $m\ge3$ families have a mass maximum inside the throat regime ($2\omega M/m-1<10^{-3}$).
+  $J/M^2<1$ with $Q$ still rising and $2\omega Q/M>1$ means $J/M^2$ is still decreasing, so reaching the
+  limit $J/M^2=1$ requires $Q$ (and $M$) to turn. If they do, the unstable branch starts below 1 and,
+  as for $m=2$, would approach 1 from below. Settling it needs the core-collapse regime resolved
+  ($N_r\gtrsim1200$ along the family, or a map that tracks the core's geometric shrinking).
+
 ## Next implementation milestones
 
 1. Rotating:

@@ -143,6 +143,12 @@ struct BSParams {
     double radial_scale = 1.0;
     double radial_cluster_fraction = 0.4;
     double radial_scale_ratio = 0.5;
+    // Adaptive: floor on L in units of the star's Komar mass, L >= radial_scale_min_mass * M (0: off).
+    // Deep in a family the star shrinks in isotropic r while the metric still varies on r ~ M:
+    // without a floor L follows the star down and the exterior is squeezed into the last few nodes.
+    // 0.03 suited the near-extremal ends of the mini m = 2-4 families (0.1 and up starve the region
+    // just outside the star; 0.015 squeezes the far field again).
+    double radial_scale_min_mass = 0.0;
     double regrid_tol = 0.1;
     bool jacobian_reuse = true;    // chord Newton: reuse the factored Jacobian (see newton_solve)
     double chord_rate = 0.25;      // refresh the Jacobian when |R| drops by less than this factor

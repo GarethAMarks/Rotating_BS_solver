@@ -118,6 +118,7 @@ radial_grid = compactified     # compactified: xi = r/(L+r), L = radial_scale | 
 radial_scale = 1.0             # compactified: L (half the radial points lie inside r < L)
 radial_cluster_fraction = 0.4  # adaptive: fraction of radial points in the wall cluster
 radial_scale_ratio = 0.5       # adaptive: L = this * outer edge of the wall region
+radial_scale_min_mass = 0      # adaptive: floor L >= this * M (0: off; 0.03 for near-extremal family ends)
 regrid_tol = 0.1               # adaptive: regrid when the wanted map drifts by more than this (relative to the cluster width / L)
 # Rotating solver performance (results do not depend on these; see README "Performance")
 jacobian_reuse = 1             # reuse the sparse LU factorization across Newton iterations / continuation steps
