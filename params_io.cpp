@@ -75,6 +75,7 @@ BSParams read_params(const std::string& file_path) {
     fill_parameter(line, std::string("wall_resolution_tol = "), p.wall_resolution_tol, true);
     fill_parameter(line, std::string("first_law_tol = "), p.first_law_tol, true);
     fill_parameter(line, std::string("first_law_retries = "), p.first_law_retries, true);
+    fill_parameter(line, std::string("corotating_radius = "), p.corotating_radius, true);
     fill_parameter(line, std::string("write_bsdata_per_step = "), p.write_bsdata_per_step, true);
 
     fill_parameter(line, std::string("use_qball_bootstrap = "), p.use_qball_bootstrap, true);

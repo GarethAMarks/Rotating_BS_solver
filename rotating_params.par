@@ -86,6 +86,7 @@ arclength_omega_max = 0.0      # stop once omega rises to this value (0: the bos
 core_resolution_tol = 0.1      # stop when f(r_1)/f(0) - 1 exceeds this (core unresolved; raise Nr)
 wall_resolution_tol = 0.2      # stop when max cell-to-cell jump in phi / max phi exceeds this (raise Nr)
 first_law_tol = 0.05           # rotating arclength: stop when consecutive models violate dM = omega dQ by more than this
+corotating_radius = 0          # rotating: R > 0 differences W + (omega/m) r exp(-(r/R)^2) (deep throats; ~0.1 M)
 first_law_retries = 2          # halve ds this many times before stopping on a first-law violation
 
 # ----------------------

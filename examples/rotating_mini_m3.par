@@ -28,5 +28,6 @@ rot_seed_width = 12
 delta_omega = 0.01
 arclength_max_steps = 600
 first_law_tol = 0.02
+corotating_radius = 0.4
 wall_resolution_tol = 0.5
 max_newton_iters = 30

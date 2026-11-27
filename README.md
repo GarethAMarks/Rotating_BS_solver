@@ -438,6 +438,7 @@ These change speed and memory, not the solutions.
 | `core_resolution_tol` | `0.1` | both | Stop when the core is unresolved: $f(r_1)/f(0)-1$ exceeds this. |
 | `wall_resolution_tol` | `0.2` | both | Stop when the star's wall is unresolved: the largest node-to-node jump of the matter amplitude, relative to its maximum, exceeds this. Adaptive grids handle thin walls; 0.5 is fine there. |
 | `first_law_tol` | `0.05` | 2D | Stop when neighbouring models violate $dM=\omega\,dQ$ by more than this (relative). The residual is $10^{-4}$–$10^{-3}$ on resolved stretches, so 0.01 suits adaptive grids. `0` disables the check. |
+| `corotating_radius` | `0` | 2D | $R>0$: difference $W+(\omega/m)\,r\,e^{-(r/R)^2}$ and add its exact derivatives back. Deep in a family the star sits in a throat where $W\approx-\omega r/m$ and the matter sees only $\omega r+mW=O(f)$; this removes the stencil error of the rigid-corotation part, which is otherwise amplified by $1/f$. About $0.1M$; `0` is off. |
 | `first_law_retries` | `2` | 2D | Halve the step this many times before stopping on a first-law violation. |
 
 ### Q-ball shooting, 1D

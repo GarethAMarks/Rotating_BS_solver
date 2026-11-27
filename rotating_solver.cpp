@@ -699,6 +699,45 @@ void RotatingSolver::deriv_r(const Vec& x, int i, int j, int a, double& d1, doub
     d2 = xr * xr * d2 + xrr * d1b;
     a1 = xr * a1b;
     a2 = xr * xr * a2 + std::abs(xrr) * a1b;
+    if (a == F_W && p_.corotating_radius > 0.0 && m_ != 0) {
+        // Near the extremal limit the star sits at the bottom of a throat where W is rigid
+        // corotation, W = -(omega/m) r + O(f), and the matter equations see only the O(f) part
+        // (omega r + m W). The stencil's truncation error on the linear part, ~(points per e-fold)^-4
+        // relative to W, is then amplified by W / (W + omega r/m) ~ 1/f. Differencing
+        // W + (omega/m) q with q = r exp(-(r/R)^2) and adding back q's exact derivatives removes it;
+        // q vanishes far out, where the compactified map cannot difference r.
+        const double R = p_.corotating_radius, c = x.back() / m_;
+        auto q = [&](int k) {
+            const double rk = r_[static_cast<size_t>(k)], z = rk / R;
+            return (z > 30.0 || !std::isfinite(rk)) ? 0.0 : rk * std::exp(-z * z);
+        };
+        double q1, q2;
+        if (i >= 2 && i <= Nr_ - 3) {
+            const double u0 = q(i - 2), u1 = q(i - 1), u2 = q(i), u3 = q(i + 1), u4 = q(i + 2);
+            q1 = (u0 / 12.0 - 2.0 * u1 / 3.0 + 2.0 * u3 / 3.0 - u4 / 12.0) / h;
+            q2 = (-u0 / 12.0 + 4.0 * u1 / 3.0 - 2.5 * u2 + 4.0 * u3 / 3.0 - u4 / 12.0) / (h * h);
+        } else if (i >= 1) {
+            const double um = q(i - 1), u = q(i), up = q(i + 1);
+            q1 = (up - um) / (2.0 * h);
+            q2 = (up - 2.0 * u + um) / (h * h);
+        } else {
+            const double u0 = q(0), u1 = q(1), u2 = q(2);
+            q1 = (-3.0 * u0 + 4.0 * u1 - u2) / (2.0 * h);
+            q2 = (u0 - 2.0 * u1 + u2) / (h * h);
+        }
+        const double rr = r_[static_cast<size_t>(i)], z = rr / R;
+        double e1 = 0.0, e2 = 0.0;  // stencil minus exact derivative of q
+        if (std::isfinite(rr) && z <= 30.0) {
+            const double g = std::exp(-z * z);
+            e1 = xr * q1 - g * (1.0 - 2.0 * z * z);
+            e2 = xr * xr * q2 + xrr * q1 - g * (2.0 * z / R) * (2.0 * z * z - 3.0);
+        } else {
+            e1 = xr * q1;
+            e2 = xr * xr * q2 + xrr * q1;
+        }
+        d1 += c * e1;
+        d2 += c * e2;
+    }
 }
 
 void RotatingSolver::deriv_t(const Vec& x, int i, int j, int a, double& d1, double& d2, double& a1, double& a2) const {
@@ -1310,7 +1349,11 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, SparseMatrix& J) {
                 for (int a = 0; a < nf_; ++a) {
                     const size_t k = idx(i, j, a);
                     const double xk = x[k];
-                    const double h = step_rel * std::max(std::abs(xk), 1e-3 * typ[a]);
+                    // The metric functions f, l, g are positive and, deep in a family, f falls to
+                    // 1e-8 at the centre: a step floored at 1e-3 * typ would there be ~20% of f in
+                    // terms ~ 1/f^2, and Newton stalls on the wrong Jacobian. Relative steps for them.
+                    const bool positive = (a == F_f || a == F_l || a == F_g) && xk > 0.0;
+                    const double h = positive ? step_rel * xk : step_rel * std::max(std::abs(xk), 1e-3 * typ[a]);
                     const double e2 = (xk + h) - (xk - h);
                     for (const auto& d : dep) {
                         xl[k] = xk + h;
@@ -1371,7 +1414,11 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, SparseMatrix& J) {
             xm = x;
             double h;
             if (k == last) h = step_rel * std::max(std::abs(x.back()), 1e-3);
-            else h = step_rel * std::max(std::abs(x[k]), 1e-3 * typ[k % static_cast<size_t>(nf_)]);
+            else {
+                const int a = static_cast<int>(k % static_cast<size_t>(nf_));
+                const bool positive = (a == F_f || a == F_l || a == F_g) && x[k] > 0.0;
+                h = positive ? step_rel * x[k] : step_rel * std::max(std::abs(x[k]), 1e-3 * typ[a]);
+            }
             xp[k] += h;
             xm[k] -= h;
             residual(xp, Rp, nullptr);

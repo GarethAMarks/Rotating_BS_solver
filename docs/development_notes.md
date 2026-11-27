@@ -732,6 +732,38 @@ The band has to start well inside the core and replace the clusters.
   as for $m=2$, would approach 1 from below. Settling it needs the core-collapse regime resolved
   ($N_r\gtrsim1200$ along the family, or a map that tracks the core's geometric shrinking).
 
+**Why the deep end stops on the first-law guard, and the corotation fix (`corotating_radius`).**
+Past $2\omega M/m-1\sim10^{-3}$ the star sits at the bottom of a near-extremal throat: outside the
+matter $(\omega r+mW)/f\approx4$ is constant out to $r\sim0.3$, $f(0)\sim10^{-7}$–$10^{-8}$, and
+consecutive models differ by 5–15% in $l,g,\phi$ at the wall ($r\sim10^{-3}$) but by $10^{-6}$ in $f$
+outside. Each arclength step moves the matter further down the throat while $M,Q,\omega$ converge
+geometrically ($2\omega M/m-1$ falls about 10% per step), so the relative first-law measure divides a
+fixed per-model error by a shrinking step. The error itself has a specific source: in the throat
+$W=-(\omega/m)r\,(1-O(f))$ ($W+\omega r/m$ is $10^{-3}$ of $W$ at the wall) and the matter equations
+see only $\omega r+mW$. The 5-point stencil differentiates the linear part with a relative error
+$\sim(\text{points per e-fold})^{-4}\approx2\times10^{-6}$ on the log band, amplified by
+$W/(W+\omega r/m)\sim1/f$ to $\sim10^{-3}$ in the corotating combination. With `corotating_radius = R`
+the radial stencils act on $W+(\omega/m)q$, $q=r\,e^{-(r/R)^2}$, and $q$'s exact derivatives are added
+back (exact in the continuum, so converged results do not depend on $R$; $R\approx0.1M$).
+
+Results ($m=3$): the whole family from the seed at 400 points agrees with the old run to
+$3\times10^{-6}$ in $J/M^2$ and now reaches $2\omega M/m-1=2.4\times10^{-4}$ (was $4.8\times10^{-4}$);
+a 600-point restart reaches $1.5\times10^{-4}$ (was $2.5$–$3.4\times10^{-4}$), with first-law residuals
+per step of $5\times10^{-8}M$ instead of $3\times10^{-7}M$ and $J/M^2=0.999968$ flat. The run then
+ends on Newton line-search failures, not on the guard. $m=4$ at 400 points gains little
+($6.1\to4.3\times10^{-4}$). Also tried: an absolute floor on the first-law test (the continuation
+then runs on into noise and $J/M^2$ drifts by $10^{-4}$; removed), and relative finite-difference
+steps for $f,l,g$ in the Jacobian (the $10^{-3}\,$typ floor was 20% of $f(0)$; kept, no measurable
+effect).
+
+**Benchmark.** Ontañón & Alcubierre (arXiv:2103.13993), $l=6$, $\omega=0.7$: Komar
+$M=5.550074$, $J=37.1475$ (their boundary error is $\sim30\times$ the quoted resolution error).
+Here, at 400 and 600 points: $M_K=5.550489$, $J_K=37.14957$, both resolutions agreeing to $10^{-6}$,
+so the two agree to $7\times10^{-5}$ in $M$ and $6\times10^{-5}$ in $J$. Their $M_{\max}$ for $l=2$
+(2.2159) matches 2.2154 here. Their tabulated $l\ge3$ "maximum masses" (3.5287 for $l=3$, at
+$\omega_{\min}=0.4434$) sit where their uniform $\Delta\rho=0.04$ grid can no longer resolve the core
+($r_{\rm core}\sim0.01$); here $M=3.5539$ at that $\omega$ and still rising.
+
 ## Next implementation milestones
 
 1. Rotating:
