@@ -764,6 +764,18 @@ so the two agree to $7\times10^{-5}$ in $M$ and $6\times10^{-5}$ in $J$. Their $
 $\omega_{\min}=0.4434$) sit where their uniform $\Delta\rho=0.04$ grid can no longer resolve the core
 ($r_{\rm core}\sim0.01$); here $M=3.5539$ at that $\omega$ and still rising.
 
+**Mini families to $m=9$ (2026-11-28).** Seeds: the torus seed fails for $m\ge7$ at any width,
+amplitude or $\omega$ tried; each $m$ instead starts from a converged $m-1$ profile with $r$
+stretched by $(6m+2)/(6m-4)$ and $\phi\to\phi\sin\theta$ (`init_file`, $\omega\approx0.94$ or 0.74).
+$\theta$ resolution, not $N_r$, limits high $m$: at $m=6$, $N_r$ 400 vs 600 agree to $10^{-5}$ but
+$N_\theta$ 31→61 moves $J/M^2$ by $8\times10^{-4}$ near the end (61→91: $5\times10^{-5}$). With $N_\theta=31$,
+$m=6$–8 read $J/M^2=1.001$–$1.015$ while $2\omega M/m$ passes 1, which is entirely discretization error.
+Use $N_\theta\approx10m$ (61 for $m=5$–7, 81 for $m=8$, 101 for $m=9$). Ends (400 radial points,
+`corotating_radius` $\approx0.18m$): $M$ rises monotonically in every family; $2\omega M/m-1$ at the
+end is $7\times10^{-4}$ ($m=5$), $1.4\times10^{-3}$ (6), $2.1\times10^{-3}$ (7), $3\times10^{-3}$ (8),
+$5\times10^{-3}$ (9), with $J/M^2=0.99989$, 0.99991, 0.99977, 0.99981, 0.99983. No mass maximum
+(no unstable branch) is resolved for any $m\ge3$; $m=2$ is the highest $m$ with one.
+
 ## Next implementation milestones
 
 1. Rotating:
