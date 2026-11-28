@@ -54,6 +54,7 @@ double RadialMap::xi(double r) const {
     double v = r / (L + r);
     for (const Cluster& c : cl)
         if (c.beta > 0.0) v += c.beta * c.B(r) / c.B_inf();
+    if (beta_log > 0.0) v += beta_log * (std::log1p(r / c1) - std::log1p(r / c2)) / std::log(c2 / c1);
     return v / (1.0 + bs);
 }
 
@@ -69,6 +70,11 @@ void RadialMap::derivs(double r, double& xi_r, double& xi_rr) const {
         const double w = c.beta / c.B_inf();
         xi_r += w * 0.5 * (ta - tb);
         xi_rr += w * 0.5 * ((1.0 - ta * ta) - (1.0 - tb * tb)) / c.delta;
+    }
+    if (beta_log > 0.0) {
+        const double w = beta_log / std::log(c2 / c1), a = 1.0 / (r + c1), b = 1.0 / (r + c2);
+        xi_r += w * (a - b);
+        xi_rr += w * (b * b - a * a);
     }
     xi_r /= 1.0 + bs;
     xi_rr /= 1.0 + bs;
@@ -227,7 +233,32 @@ RadialMap RotatingSolver::wanted_map(const Vec& x) const {
     if (hi <= 0.0) return map_;  // no profile to adapt to
     RadialMap m;
     m.L = std::max(1e-3, p_.radial_scale_ratio * hi);
-    const double c = std::min(0.95, std::max(0.0, p_.radial_cluster_fraction));
+    if (p_.radial_scale_min_mass > 0.0) {
+        // The exterior metric varies on r ~ M: keep it resolved when the star itself has shrunk to
+        // r << M in isotropic coordinates (the strongly relativistic end of a family).
+        const double M = observables(x).mass_komar;
+        if (M > 0.0) m.L = std::max(m.L, p_.radial_scale_min_mass * M);
+    }
+    double c = std::min(0.95, std::max(0.0, p_.radial_cluster_fraction));
+    // Logarithmic band: from c1 = radial_log_inner x (core scale), rounded down to a power of
+    // radial_log_quantum so that a geometrically shrinking core regrids only every few steps, out to
+    // c2 = radial_log_outer_mass x M.
+    double c_log = 0.0;
+    if (p_.radial_log_fraction > 0.0) {
+        const double M = observables(x).mass_komar;
+        const double scale = (core > 0.0) ? std::min(core, hi) : hi;
+        const double q = std::max(1.0001, p_.radial_log_quantum);
+        const double c1 = std::pow(q, std::floor(std::log(p_.radial_log_inner * scale) / std::log(q)));
+        const double c2 = p_.radial_log_outer_mass * std::max(M, hi);
+        if (c2 > 4.0 * c1) {
+            c_log = std::min(0.9, p_.radial_log_fraction);
+            c = std::min(c, 0.95 - c_log);
+            m.c1 = c1;
+            m.c2 = c2;
+        }
+    }
+    const double base = 1.0 - c - c_log;  // fraction left to the compactification r/(L+r)
+    if (c_log > 0.0) m.beta_log = c_log / base;
     RadialMap::Cluster& cw = m.cl[1];
     cw.ra = std::max(0.0, lo);
     cw.rb = hi;
@@ -239,16 +270,16 @@ RadialMap RotatingSolver::wanted_map(const Vec& x) const {
         cc_frac = std::min(std::max(cc_frac, floor_frac), c - floor_frac);
     }
     const double cw_frac = c - cc_frac;
-    cw.beta = cw_frac / (1.0 - c);
+    cw.beta = (cw_frac > 0.0) ? cw_frac / base : 0.0;
     // Soft cluster edges: half the thinnest wall, but at least 3 cluster cells, so that the map
     // derivatives vary slowly on the grid.
     cw.delta = std::max(0.5 * tmin, (cw_frac > 0.0) ? 3.0 * (cw.rb - cw.ra) / (cw_frac * Nr_) : 0.0);
     cw.delta = std::max(cw.delta, 1e-3 * cw.rb);
-    if (cc_frac > 0.0) {
+    if (cc_frac > 0.0 && c > 0.0) {
         RadialMap::Cluster& cc = m.cl[0];
         cc.ra = -core;
         cc.rb = core;
-        cc.beta = cc_frac / (1.0 - c);
+        cc.beta = cc_frac / base;
         cc.delta = std::max(0.5 * tcore, 3.0 * core / (cc_frac * Nr_));
         cc.delta = std::max(cc.delta, 1e-3 * core);
     }
@@ -260,6 +291,10 @@ bool RotatingSolver::map_drifted(const RadialMap& want) const {
     if (!map_adapted_) return true;
     const double tol = p_.regrid_tol;
     if (std::abs(want.L - map_.L) > tol * map_.L) return true;
+    if ((want.beta_log > 0.0) != (map_.beta_log > 0.0)) return true;
+    if (map_.beta_log > 0.0 && (want.c1 != map_.c1 || std::abs(want.c2 - map_.c2) > tol * map_.c2 ||
+                                std::abs(want.beta_log - map_.beta_log) > tol * map_.beta_log))
+        return true;
     for (size_t k = 0; k < 2; ++k) {
         const RadialMap::Cluster &a = map_.cl[k], &b = want.cl[k];
         if ((a.beta > 0.0) != (b.beta > 0.0)) return true;
@@ -317,6 +352,8 @@ bool RotatingSolver::regrid(const RadialMap& want, const std::vector<Vec*>& stat
             std::cout << "; " << names[k] << " [" << std::max(0.0, cl.ra) << ", " << cl.rb << "] edge " << cl.delta << ", "
                       << 100.0 * map_.fraction(k) << "% of points";
         }
+        if (map_.beta_log > 0.0)
+            std::cout << "; log band [" << map_.c1 << ", " << map_.c2 << "] " << 100.0 * map_.log_fraction() << "% of points";
         std::cout << "; r_1 = " << r_[1] << "\n";
         return true;
     }
@@ -526,9 +563,15 @@ bool RotatingSolver::load_init_file(const std::string& path_arg) {
                     ok = p != std::string::npos &&
                          std::sscanf(line.c_str() + p + 9, "fraction=%lf ra=%lf rb=%lf delta=%lf", &fr[c], &cl.ra, &cl.rb, &cl.delta) == 4;
                 }
-                if (ok && fr[0] + fr[1] < 1.0) {
-                    const double S = (fr[0] + fr[1]) / (1.0 - fr[0] - fr[1]);
+                double flog = 0.0;
+                const size_t pl = line.find("logband(");
+                if (ok && pl != std::string::npos &&
+                    std::sscanf(line.c_str() + pl + 8, "fraction=%lf c1=%lf c2=%lf", &flog, &mp.c1, &mp.c2) != 3)
+                    flog = 0.0;
+                if (ok && fr[0] + fr[1] + flog < 1.0) {
+                    const double S = (fr[0] + fr[1] + flog) / (1.0 - fr[0] - fr[1] - flog);
                     for (int c = 0; c < 2; ++c) mp.cl[static_cast<size_t>(c)].beta = fr[c] * (1.0 + S);
+                    mp.beta_log = flog * (1.0 + S);
                     init_map_ = mp;
                     init_map_valid_ = true;
                 }
@@ -656,6 +699,45 @@ void RotatingSolver::deriv_r(const Vec& x, int i, int j, int a, double& d1, doub
     d2 = xr * xr * d2 + xrr * d1b;
     a1 = xr * a1b;
     a2 = xr * xr * a2 + std::abs(xrr) * a1b;
+    if (a == F_W && p_.corotating_radius > 0.0 && m_ != 0) {
+        // Near the extremal limit the star sits at the bottom of a throat where W is rigid
+        // corotation, W = -(omega/m) r + O(f), and the matter equations see only the O(f) part
+        // (omega r + m W). The stencil's truncation error on the linear part, ~(points per e-fold)^-4
+        // relative to W, is then amplified by W / (W + omega r/m) ~ 1/f. Differencing
+        // W + (omega/m) q with q = r exp(-(r/R)^2) and adding back q's exact derivatives removes it;
+        // q vanishes far out, where the compactified map cannot difference r.
+        const double R = p_.corotating_radius, c = x.back() / m_;
+        auto q = [&](int k) {
+            const double rk = r_[static_cast<size_t>(k)], z = rk / R;
+            return (z > 30.0 || !std::isfinite(rk)) ? 0.0 : rk * std::exp(-z * z);
+        };
+        double q1, q2;
+        if (i >= 2 && i <= Nr_ - 3) {
+            const double u0 = q(i - 2), u1 = q(i - 1), u2 = q(i), u3 = q(i + 1), u4 = q(i + 2);
+            q1 = (u0 / 12.0 - 2.0 * u1 / 3.0 + 2.0 * u3 / 3.0 - u4 / 12.0) / h;
+            q2 = (-u0 / 12.0 + 4.0 * u1 / 3.0 - 2.5 * u2 + 4.0 * u3 / 3.0 - u4 / 12.0) / (h * h);
+        } else if (i >= 1) {
+            const double um = q(i - 1), u = q(i), up = q(i + 1);
+            q1 = (up - um) / (2.0 * h);
+            q2 = (up - 2.0 * u + um) / (h * h);
+        } else {
+            const double u0 = q(0), u1 = q(1), u2 = q(2);
+            q1 = (-3.0 * u0 + 4.0 * u1 - u2) / (2.0 * h);
+            q2 = (u0 - 2.0 * u1 + u2) / (h * h);
+        }
+        const double rr = r_[static_cast<size_t>(i)], z = rr / R;
+        double e1 = 0.0, e2 = 0.0;  // stencil minus exact derivative of q
+        if (std::isfinite(rr) && z <= 30.0) {
+            const double g = std::exp(-z * z);
+            e1 = xr * q1 - g * (1.0 - 2.0 * z * z);
+            e2 = xr * xr * q2 + xrr * q1 - g * (2.0 * z / R) * (2.0 * z * z - 3.0);
+        } else {
+            e1 = xr * q1;
+            e2 = xr * xr * q2 + xrr * q1;
+        }
+        d1 += c * e1;
+        d2 += c * e2;
+    }
 }
 
 void RotatingSolver::deriv_t(const Vec& x, int i, int j, int a, double& d1, double& d2, double& a1, double& a2) const {
@@ -1267,7 +1349,11 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, SparseMatrix& J) {
                 for (int a = 0; a < nf_; ++a) {
                     const size_t k = idx(i, j, a);
                     const double xk = x[k];
-                    const double h = step_rel * std::max(std::abs(xk), 1e-3 * typ[a]);
+                    // The metric functions f, l, g are positive and, deep in a family, f falls to
+                    // 1e-8 at the centre: a step floored at 1e-3 * typ would there be ~20% of f in
+                    // terms ~ 1/f^2, and Newton stalls on the wrong Jacobian. Relative steps for them.
+                    const bool positive = (a == F_f || a == F_l || a == F_g) && xk > 0.0;
+                    const double h = positive ? step_rel * xk : step_rel * std::max(std::abs(xk), 1e-3 * typ[a]);
                     const double e2 = (xk + h) - (xk - h);
                     for (const auto& d : dep) {
                         xl[k] = xk + h;
@@ -1328,7 +1414,11 @@ bool RotatingSolver::assemble_jacobian(const Vec& x, SparseMatrix& J) {
             xm = x;
             double h;
             if (k == last) h = step_rel * std::max(std::abs(x.back()), 1e-3);
-            else h = step_rel * std::max(std::abs(x[k]), 1e-3 * typ[k % static_cast<size_t>(nf_)]);
+            else {
+                const int a = static_cast<int>(k % static_cast<size_t>(nf_));
+                const bool positive = (a == F_f || a == F_l || a == F_g) && x[k] > 0.0;
+                h = positive ? step_rel * x[k] : step_rel * std::max(std::abs(x[k]), 1e-3 * typ[a]);
+            }
             xp[k] += h;
             xm[k] -= h;
             residual(xp, Rp, nullptr);
@@ -1635,6 +1725,7 @@ void RotatingSolver::write_profile(const std::string& path, const Vec& x) const 
         const RadialMap::Cluster& cl = map_.cl[static_cast<size_t>(k)];
         out << " cluster" << k << "(fraction=" << map_.fraction(k) << " ra=" << cl.ra << " rb=" << cl.rb << " delta=" << cl.delta << ")";
     }
+    if (map_.beta_log > 0.0) out << " logband(fraction=" << map_.log_fraction() << " c1=" << map_.c1 << " c2=" << map_.c2 << ")";
     out << "\n";
     out << "# i j r theta f l g W "
         << (matter_ == Matter::Scalar ? "phi" : matter_ == Matter::Proca ? "V H1 H2 H3" : "D1 D2 D3 D4") << "\n";

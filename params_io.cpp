@@ -75,6 +75,7 @@ BSParams read_params(const std::string& file_path) {
     fill_parameter(line, std::string("wall_resolution_tol = "), p.wall_resolution_tol, true);
     fill_parameter(line, std::string("first_law_tol = "), p.first_law_tol, true);
     fill_parameter(line, std::string("first_law_retries = "), p.first_law_retries, true);
+    fill_parameter(line, std::string("corotating_radius = "), p.corotating_radius, true);
     fill_parameter(line, std::string("write_bsdata_per_step = "), p.write_bsdata_per_step, true);
 
     fill_parameter(line, std::string("use_qball_bootstrap = "), p.use_qball_bootstrap, true);
@@ -104,6 +105,11 @@ BSParams read_params(const std::string& file_path) {
         fill_parameter(line, std::string("radial_scale = "), p.radial_scale, true);
         fill_parameter(line, std::string("radial_cluster_fraction = "), p.radial_cluster_fraction, true);
         fill_parameter(line, std::string("radial_scale_ratio = "), p.radial_scale_ratio, true);
+        fill_parameter(line, std::string("radial_scale_min_mass = "), p.radial_scale_min_mass, true);
+        fill_parameter(line, std::string("radial_log_fraction = "), p.radial_log_fraction, true);
+        fill_parameter(line, std::string("radial_log_inner = "), p.radial_log_inner, true);
+        fill_parameter(line, std::string("radial_log_quantum = "), p.radial_log_quantum, true);
+        fill_parameter(line, std::string("radial_log_outer_mass = "), p.radial_log_outer_mass, true);
         fill_parameter(line, std::string("regrid_tol = "), p.regrid_tol, true);
         fill_parameter(line, std::string("jacobian_reuse = "), p.jacobian_reuse, true);
         fill_parameter(line, std::string("chord_rate = "), p.chord_rate, true);

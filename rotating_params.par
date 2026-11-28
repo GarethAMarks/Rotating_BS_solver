@@ -86,6 +86,7 @@ arclength_omega_max = 0.0      # stop once omega rises to this value (0: the bos
 core_resolution_tol = 0.1      # stop when f(r_1)/f(0) - 1 exceeds this (core unresolved; raise Nr)
 wall_resolution_tol = 0.2      # stop when max cell-to-cell jump in phi / max phi exceeds this (raise Nr)
 first_law_tol = 0.05           # rotating arclength: stop when consecutive models violate dM = omega dQ by more than this
+corotating_radius = 0          # rotating: R > 0 differences W + (omega/m) r exp(-(r/R)^2) (deep throats; ~0.1 M)
 first_law_retries = 2          # halve ds this many times before stopping on a first-law violation
 
 # ----------------------
@@ -118,6 +119,11 @@ radial_grid = compactified     # compactified: xi = r/(L+r), L = radial_scale | 
 radial_scale = 1.0             # compactified: L (half the radial points lie inside r < L)
 radial_cluster_fraction = 0.4  # adaptive: fraction of radial points in the wall cluster
 radial_scale_ratio = 0.5       # adaptive: L = this * outer edge of the wall region
+radial_scale_min_mass = 0      # adaptive: floor L >= this * M (0: off; 0.03 for near-extremal family ends)
+radial_log_fraction = 0        # adaptive: fraction of points in a log-spaced band c1..c2 (0: off; 0.6 with radial_cluster_fraction = 0 for compact cores)
+radial_log_inner = 0.1         # adaptive: c1 = this * core scale, rounded down to a power of radial_log_quantum
+radial_log_quantum = 4         # adaptive: c1 moves in factors of this (fewer regrids as the core shrinks)
+radial_log_outer_mass = 1      # adaptive: c2 = this * M
 regrid_tol = 0.1               # adaptive: regrid when the wanted map drifts by more than this (relative to the cluster width / L)
 # Rotating solver performance (results do not depend on these; see README "Performance")
 jacobian_reuse = 1             # reuse the sparse LU factorization across Newton iterations / continuation steps

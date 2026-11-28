@@ -663,6 +663,119 @@ Tried and rejected:
   interior ILUT: 85 → 70 GMRES iterations, not pursued;
 - an exact LU with grid nested dissection, already rejected in the memory study above.
 
+## Rotating mini boson stars with $m\ge3$ near the extremal limit (2026-11-27)
+
+Goal: follow the mini ($\kappa=8\pi$) families for $m=3,4,5$ far enough to see whether any model past
+the first mass maximum has $J/M^2>1$. Runs in `runs/` (not committed); summary and plots in the
+project report.
+
+**Seeds.** The torus seed at $\omega=0.9$ collapses to the vacuum or stalls for $m\ge3$. Starting
+nearer the Newtonian limit works: $\omega=0.95$, `rot_seed_amp = 0.01`, `rot_seed_width` 12–16
+($m=3$) and 20 ($m=4,5$). The solved stars peak at $r\approx 6m+2$ with an angular half-width
+$\approx0.39,0.31,0.24$ rad for $m=3,4,5$; the seed is about twice as wide in $\theta$, which is why
+the basin narrows with $m$. Example: `examples/rotating_mini_m3.par`.
+
+**What stopped the families.** Deep in the family the star shrinks in isotropic $r$ (core edge
+$\sim0.01$, wall $\sim0.03$) while $M\approx3.6$: a throat forms outside it, $f$ falls to $10^{-5}$
+at the centre and varies over decades out to $r\sim M$. The adaptive map's $L=0.5\,r_{\rm wall}$
+followed the star down ($L\approx0.08$), leaving the exterior to the last few nodes. Every regrid then
+moved $M$, $\omega$ and $J/M^2$ by more than a continuation step (jumps $1.6\times10^{-3}$ →
+$2.4\times10^{-2}$ in $M$ at 200×41), the first-law guard stopped the run, and restarts at 200/300/400
+points disagreed by $2\times10^{-2}$ in $J/M^2$. $N_\theta$ is irrelevant here (41 vs 81: $10^{-5}$);
+$N_r$ is the only lever.
+
+**Fix kept:** `radial_scale_min_mass`, a floor $L\ge c\,M$ (Komar). With fixed maps the solutions
+converge at 3rd–5th order in $N_r$. The best floor is $c\approx0.03$: $0.1$–$0.5$ starve the region just
+outside the star (the error then sits at $r\approx0.01$–$0.05$ and propagates outward as an offset
+in $\ln f$), $0.015$ squeezes the far field again. Finite $N_r$ biases $J/M^2$ low with
+$c=0.1$ and high with $c=0.03$, so the two bracket the converged value.
+
+**Tried first:** a logarithmic band from the wall's outer edge to $\sim M$ next to the clusters, taking 15–20% of the points from the compactification. It was no better than the floor (see the next paragraph for the version that works).
+
+**Logarithmic radial band (kept, `radial_log_fraction`).** The clusters are uniform in $r$ and must
+follow the core as it shrinks geometrically (about 18% per regrid); every regrid moved $J/M^2$ by
+$10^{-5}$–$10^{-4}$, growing as the core shrank. A band with node density $\propto 1/(r+c_1)$ from
+$c_1$ = 0.1 × the core scale (snapped to powers of 4) out to $c_2=M$, holding 60% of the points with
+the clusters off, gives every scale the same points per e-fold. Results for $m=3$:
+- the end state of the old 600-point run ($\omega=0.4195$), restarted on the log grid at 600 points:
+  $J/M^2=0.999971$, against the Richardson value $0.99997\pm2\times10^{-5}$ from the cluster grids
+  at 400–1200 points;
+- whole families from the seed: 400 and 600 points agree to $6\times10^{-6}$ in $J/M^2$ at the old
+  stopping point, where the cluster grids at 400 points were off by $4\times10^{-4}$; 10 and 21 min
+  (solver clock, 1 and 2 threads);
+- a restart pushed on to $2\omega M/m-1=2.5\times10^{-4}$ ($\phi$ peaked at $r=0.0016$, ten times
+  further in than before; $f(0)=6\times10^{-8}$). $M$ still rises (3.57917) and $J/M^2$ drifts down
+  to 0.99996. The runs now stop on the first-law guard because the steps become physically tiny
+  ($\Delta M\sim10^{-5}$ per step while the core shrinks), not because of regrid jumps.
+The band has to start well inside the core and replace the clusters.
+
+**Results** ($J/M^2$ with Komar $M$; Richardson extrapolation over fixed maps with $N_r$ = 400–1200):
+- every family approaches the extremal-Kerr limit: $J/M^2\to1$ together with $2\omega M/m\to1$
+  ($\omega/m\to\Omega_H=1/2M$). Along a family $d(J/M^2)=(m\,dQ/M^2)(1-2\omega Q/M)$, from $J=mQ$ and
+  $dM=\omega\,dQ$, so $J/M^2$ is stationary only at $Q$ extrema (cusps) or where $2\omega Q=M$;
+- $m=2$: $M_{\max}=2.2154$ at $\omega=0.6354$ ($J/M^2=0.9798$), $\omega_{\min}=0.5123$. On the unstable
+  branch $J/M^2$ rises monotonically toward 1 from below: $0.999991\pm3\times10^{-6}$ at
+  $\omega=0.52101$, $0.999997\pm5\times10^{-6}$ at the deepest model ($2\omega M/m-1=3.5\times10^{-4}$).
+  The apparent maxima at fixed resolution ($0.99996$ at 400 points with $c=0.1$, $1.00005$ at 600 with
+  $c=0.03$) are discretization error;
+- $m=3$: $J/M^2$ decreases monotonically from 1.99 ($\omega=0.95$) and crosses 1 near $\omega\approx0.42$;
+  $0.99997\pm2\times10^{-5}$ at $\omega=0.4195$. $M$ is still rising there (3.5790), with
+  $2\omega M/m-1=8\times10^{-4}$: no mass maximum before the throat limit at the reachable resolution;
+- $m=4,5$ (400 points): the same picture, $M$ rising monotonically to 5.245 ($\omega=0.382$) and
+  6.947 ($\omega=0.361$). At fixed resolution with $c=0.03$, $J/M^2$ reads about $1+3\times10^{-4}$
+  shortly before the end, but for $m=4$ the deepest model ($\omega=0.38186$,
+  $2\omega M/m-1=1.4\times10^{-3}$) extrapolates to $J/M^2=0.99990\pm1\times10^{-5}$
+  ($N_r$ = 400/600/800/1200: 0.999826, 0.999854, 0.999879, 0.999894);
+- open: whether $m\ge3$ families have a mass maximum inside the throat regime ($2\omega M/m-1<10^{-3}$).
+  $J/M^2<1$ with $Q$ still rising and $2\omega Q/M>1$ means $J/M^2$ is still decreasing, so reaching the
+  limit $J/M^2=1$ requires $Q$ (and $M$) to turn. If they do, the unstable branch starts below 1 and,
+  as for $m=2$, would approach 1 from below. Settling it needs the core-collapse regime resolved
+  ($N_r\gtrsim1200$ along the family, or a map that tracks the core's geometric shrinking).
+
+**Why the deep end stops on the first-law guard, and the corotation fix (`corotating_radius`).**
+Past $2\omega M/m-1\sim10^{-3}$ the star sits at the bottom of a near-extremal throat: outside the
+matter $(\omega r+mW)/f\approx4$ is constant out to $r\sim0.3$, $f(0)\sim10^{-7}$–$10^{-8}$, and
+consecutive models differ by 5–15% in $l,g,\phi$ at the wall ($r\sim10^{-3}$) but by $10^{-6}$ in $f$
+outside. Each arclength step moves the matter further down the throat while $M,Q,\omega$ converge
+geometrically ($2\omega M/m-1$ falls about 10% per step), so the relative first-law measure divides a
+fixed per-model error by a shrinking step. The error itself has a specific source: in the throat
+$W=-(\omega/m)r\,(1-O(f))$ ($W+\omega r/m$ is $10^{-3}$ of $W$ at the wall) and the matter equations
+see only $\omega r+mW$. The 5-point stencil differentiates the linear part with a relative error
+$\sim(\text{points per e-fold})^{-4}\approx2\times10^{-6}$ on the log band, amplified by
+$W/(W+\omega r/m)\sim1/f$ to $\sim10^{-3}$ in the corotating combination. With `corotating_radius = R`
+the radial stencils act on $W+(\omega/m)q$, $q=r\,e^{-(r/R)^2}$, and $q$'s exact derivatives are added
+back (exact in the continuum, so converged results do not depend on $R$; $R\approx0.1M$).
+
+Results ($m=3$): the whole family from the seed at 400 points agrees with the old run to
+$3\times10^{-6}$ in $J/M^2$ and now reaches $2\omega M/m-1=2.4\times10^{-4}$ (was $4.8\times10^{-4}$);
+a 600-point restart reaches $1.5\times10^{-4}$ (was $2.5$–$3.4\times10^{-4}$), with first-law residuals
+per step of $5\times10^{-8}M$ instead of $3\times10^{-7}M$ and $J/M^2=0.999968$ flat. The run then
+ends on Newton line-search failures, not on the guard. $m=4$ at 400 points gains little
+($6.1\to4.3\times10^{-4}$). Also tried: an absolute floor on the first-law test (the continuation
+then runs on into noise and $J/M^2$ drifts by $10^{-4}$; removed), and relative finite-difference
+steps for $f,l,g$ in the Jacobian (the $10^{-3}\,$typ floor was 20% of $f(0)$; kept, no measurable
+effect).
+
+**Benchmark.** Ontañón & Alcubierre (arXiv:2103.13993), $l=6$, $\omega=0.7$: Komar
+$M=5.550074$, $J=37.1475$ (their boundary error is $\sim30\times$ the quoted resolution error).
+Here, at 400 and 600 points: $M_K=5.550489$, $J_K=37.14957$, both resolutions agreeing to $10^{-6}$,
+so the two agree to $7\times10^{-5}$ in $M$ and $6\times10^{-5}$ in $J$. Their $M_{\max}$ for $l=2$
+(2.2159) matches 2.2154 here. Their tabulated $l\ge3$ "maximum masses" (3.5287 for $l=3$, at
+$\omega_{\min}=0.4434$) sit where their uniform $\Delta\rho=0.04$ grid can no longer resolve the core
+($r_{\rm core}\sim0.01$); here $M=3.5539$ at that $\omega$ and still rising.
+
+**Mini families to $m=9$ (2026-11-28).** Seeds: the torus seed fails for $m\ge7$ at any width,
+amplitude or $\omega$ tried; each $m$ instead starts from a converged $m-1$ profile with $r$
+stretched by $(6m+2)/(6m-4)$ and $\phi\to\phi\sin\theta$ (`init_file`, $\omega\approx0.94$ or 0.74).
+$\theta$ resolution, not $N_r$, limits high $m$: at $m=6$, $N_r$ 400 vs 600 agree to $10^{-5}$ but
+$N_\theta$ 31→61 moves $J/M^2$ by $8\times10^{-4}$ near the end (61→91: $5\times10^{-5}$). With $N_\theta=31$,
+$m=6$–8 read $J/M^2=1.001$–$1.015$ while $2\omega M/m$ passes 1, which is entirely discretization error.
+Use $N_\theta\approx10m$ (61 for $m=5$–7, 81 for $m=8$, 101 for $m=9$). Ends (400 radial points,
+`corotating_radius` $\approx0.18m$): $M$ rises monotonically in every family; $2\omega M/m-1$ at the
+end is $7\times10^{-4}$ ($m=5$), $1.4\times10^{-3}$ (6), $2.1\times10^{-3}$ (7), $3\times10^{-3}$ (8),
+$5\times10^{-3}$ (9), with $J/M^2=0.99989$, 0.99991, 0.99977, 0.99981, 0.99983. No mass maximum
+(no unstable branch) is resolved for any $m\ge3$; $m=2$ is the highest $m$ with one.
+
 ## Next implementation milestones
 
 1. Rotating:

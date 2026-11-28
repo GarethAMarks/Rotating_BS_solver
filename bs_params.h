@@ -79,6 +79,8 @@ struct BSParams {
     double arclength_omega_max = 0.0; // stop once omega rises to this value (0: the boson mass)
     double core_resolution_tol = 0.1;  // stop once f(r_1)/f(0) - 1 exceeds this (core unresolved)
     double wall_resolution_tol = 0.2;  // stop once max_i |phi_{i+1} - phi_i| / max|phi| exceeds this
+    double corotating_radius = 0.0;    // rotating: R > 0 differences W + (omega/m) r exp(-(r/R)^2) instead of W (removes
+                                       // the truncation error of rigid corotation deep in a throat; ~0.1 M)
     int first_law_retries = 2;         // halve the step this many times before stopping on a violation
     double first_law_tol = 0.05;       // rotating: stop once consecutive models violate dM = omega dQ by more
                                        // than this (relative; 0 disables)
@@ -143,6 +145,19 @@ struct BSParams {
     double radial_scale = 1.0;
     double radial_cluster_fraction = 0.4;
     double radial_scale_ratio = 0.5;
+    // Adaptive: floor on L in units of the star's Komar mass, L >= radial_scale_min_mass * M (0: off).
+    // Deep in a family the star shrinks in isotropic r while the metric still varies on r ~ M:
+    // without a floor L follows the star down and the exterior is squeezed into the last few nodes.
+    // 0.03 suited the near-extremal ends of the mini m = 2-4 families (0.1 and up starve the region
+    // just outside the star; 0.015 squeezes the far field again).
+    double radial_scale_min_mass = 0.0;
+    // Adaptive: logarithmic band of radial nodes (density ~ 1/r), a fraction radial_log_fraction of
+    // the points (0: off), from c1 = radial_log_inner x the core scale (rounded down to a power of
+    // radial_log_quantum) out to c2 = radial_log_outer_mass x M. For very compact, shrinking cores.
+    double radial_log_fraction = 0.0;
+    double radial_log_inner = 0.1;
+    double radial_log_quantum = 4.0;
+    double radial_log_outer_mass = 1.0;
     double regrid_tol = 0.1;
     bool jacobian_reuse = true;    // chord Newton: reuse the factored Jacobian (see newton_solve)
     double chord_rate = 0.25;      // refresh the Jacobian when |R| drops by less than this factor
